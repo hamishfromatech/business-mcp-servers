@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Board - Preview</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .board-selector {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        select, button, input {
+            padding: 10px 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.08);
+            color: #e0e0e0;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        select:hover, button:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        button.primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            font-weight: 500;
+        }
+
+        button.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+        }
+
+        .column {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 20px;
+            min-height: 500px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .column-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid;
+        }
+
+        .column-header h2 {
+            font-size: 16px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .column-header .count {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+
+        .column.todo .column-header { border-color: #6366f1; }
+        .column.in_progress .column-header { border-color: #f59e0b; }
+        .column.review .column-header { border-color: #8b5cf6; }
+        .column.done .column-header { border-color: #10b981; }
+
+        .tasks {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .task {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .task:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .task-title {
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .task-description {
+            font-size: 13px;
+            color: #a0a0a0;
+            margin-bottom: 12px;
+        }
+
+        .task-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            background: rgba(99, 102, 241, 0.2);
+            color: #818cf8;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        .priority {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .priority.low { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .priority.medium { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .priority.high { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .priority.urgent { background: rgba(239, 68, 68, 0.4); color: #ef4444; }
+
+        .assignee {
+            font-size: 12px;
+            color: #a0a0a0;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #a0a0a0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+        }
+
+        .empty-state p {
+            margin-bottom: 16px;
+        }
+
+        @media (max-width: 1200px) {
+            .board {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .board {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📋 Kanban Board</h1>
+            <div class="board-selector">
+                <select>
+                    <option selected>Project Alpha</option>
+                    <option>Personal Tasks</option>
+                </select>
+                <button class="primary">+ New Task</button>
+                <button>+ New Board</button>
+            </div>
+        </header>
+
+        <div class="stats-bar">
+            <div class="stat">
+                <div class="stat-value">12</div>
+                <div class="stat-label">Total Tasks</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">3</div>
+                <div class="stat-label">To Do</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">5</div>
+                <div class="stat-label">In Progress</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">2</div>
+                <div class="stat-label">Review</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">2</div>
+                <div class="stat-label">Done</div>
+            </div>
+        </div>
+
+        <div class="board">
+            <!-- TODO Column -->
+            <div class="column todo">
+                <div class="column-header">
+                    <h2>📋 TO DO</h2>
+                    <span class="count">3</span>
+                </div>
+                <div class="tasks">
+                    <div class="task">
+                        <div class="task-title">Update documentation</div>
+                        <div class="task-description">Add API docs to README</div>
+                        <div class="task-meta">
+                            <span class="priority low">low</span>
+                            <span class="tag">docs</span>
+                        </div>
+                    </div>
+                    <div class="task">
+                        <div class="task-title">Create login page</div>
+                        <div class="task-description">Implement OAuth login flow</div>
+                        <div class="task-meta">
+                            <span class="priority high">high</span>
+                            <span class="tag">auth</span>
+                            <span class="tag">ui</span>
+                        </div>
+                        <div class="assignee">👤 Sarah</div>
+                    </div>
+                    <div class="task">
+                        <div class="task-title">Database migrations</div>
+                        <div class="task-meta">
+                            <span class="priority medium">medium</span>
+                            <span class="tag">backend</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- IN PROGRESS Column -->
+            <div class="column in_progress">
+                <div class="column-header">
+                    <h2>🔄 IN PROGRESS</h2>
+                    <span class="count">5</span>
+                </div>
+                <div class="tasks">
+                    <div class="task">
+                        <div class="task-title">Design UI mockups</div>
+                        <div class="task-description">Create wireframes for the dashboard</div>
+                        <div class="task-meta">
+                            <span class="priority high">high</span>
+                            <span class="tag">design</span>
+                            <span class="tag">ui</span>
+                        </div>
+                        <div class="assignee">👤 Alice</div>
+                    </div>
+                    <div class="task">
+                        <div class="task-title">Implement search API</div>
+                        <div class="task-description">Full-text search with filters</div>
+                        <div class="task-meta">
+                            <span class="priority urgent">urgent</span>
+                            <span class="tag">api</span>
+                            <span class="tag">search</span>
+                        </div>
+                        <div class="assignee">👤 Bob</div>
+                    </div>
+                    <div class="task">
+                        <div class="task-title">Write unit tests</div>
+                        <div class="task-meta">
+                            <span class="priority medium">medium</span>
+                            <span class="tag">testing</span>
+                        </div>
+                        <div class="assignee">👤 Charlie</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REVIEW Column -->
+            <div class="column review">
+                <div class="column-header">
+                    <h2>👀 REVIEW</h2>
+                    <span class="count">2</span>
+                </div>
+                <div class="tasks">
+                    <div class="task">
+                        <div class="task-title">Set up database</div>
+                        <div class="task-description">Configure PostgreSQL cluster</div>
+                        <div class="task-meta">
+                            <span class="priority urgent">urgent</span>
+                            <span class="tag">backend</span>
+                            <span class="tag">db</span>
+                        </div>
+                        <div class="assignee">👤 Bob</div>
+                    </div>
+                    <div class="task">
+                        <div class="task-title">API rate limiting</div>
+                        <div class="task-meta">
+                            <span class="priority medium">medium</span>
+                            <span class="tag">api</span>
+                            <span class="tag">security</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DONE Column -->
+            <div class="column done">
+                <div class="column-header">
+                    <h2>✅ DONE</h2>
+                    <span class="count">2</span>
+                </div>
+                <div class="tasks">
+                    <div class="task">
+                        <div class="task-title">Project setup</div>
+                        <div class="task-meta">
+                            <span class="priority low">low</span>
+                            <span class="tag">setup</span>
+                        </div>
+                        <div class="assignee">👤 Alice</div>
+                    </div>
+                    <div class="task">
+                        <div class="task-title">CI/CD pipeline</div>
+                        <div class="task-description">GitHub Actions workflow</div>
+                        <div class="task-meta">
+                            <span class="priority high">high</span>
+                            <span class="tag">devops</span>
+                        </div>
+                        <div class="assignee">👤 Charlie</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

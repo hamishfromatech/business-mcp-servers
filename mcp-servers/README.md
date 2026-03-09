@@ -36,6 +36,7 @@ python server.py
 |--------|-------------|
 | [career-manager](./career-manager) | Career development with resume tracking, job applications, cover letters, and interview prep |
 | [project-manager](./project-manager) | Projects, tasks, milestones, and team management |
+| [kanban-mcp](./kanban-mcp) | Kanban board with web UI, CLI tools, task management, and board statistics |
 | [meeting-notes](./meeting-notes) | Meetings with agendas, attendees, and action items |
 | [task-automator](./task-automator) | Workflows, templates, triggers, and quick actions |
 
@@ -151,6 +152,7 @@ rm mcp-servers/contact-book/data/contacts.json
 1. [project-manager](./project-manager) - Hierarchical tasks, team management
 2. [crm](./crm) - Multi-entity relationships
 3. [meeting-notes](./meeting-notes) - Agendas, attendees, action items
+4. [kanban-mcp](./kanban-mcp) - Web UI, CLI tools, board management
 
 **Advanced** - Sophisticated patterns:
 1. [zettelkasten](./zettelkasten) - Link graphs, pathfinding

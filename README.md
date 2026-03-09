@@ -12,7 +12,7 @@ Created by **hamishfromatech** - [YouTube](https://youtube.com/@hamishfromatech)
 
 ## What This Repository Is
 
-This repository contains **17 fully-functional MCP servers** that demonstrate patterns, tools, and resources you can use as reference when building your own MCP servers. Each server is self-contained, well-documented, and showcases different aspects of the MCP protocol.
+This repository contains **19 fully-functional MCP servers** that demonstrate patterns, tools, and resources you can use as reference when building your own MCP servers. Each server is self-contained, well-documented, and showcases different aspects of the MCP protocol.
 
 **The key insight**: These servers don't need to connect to any external applications or services. They're designed to work standalone, proving that you can build powerful, business-valuable MCP servers without complex integrations.
 
@@ -50,6 +50,7 @@ This repository proves that MCP servers can deliver all of this without a single
 |--------|-------------|--------------|-----------|
 | [Career Manager](./mcp-servers/career-manager) | Complete career management system | Resume builder, job applications, interview practice, skills inventory, networking | `~/.career-manager/*.json` |
 | [Project Manager](./mcp-servers/project-manager) | Projects, tasks, milestones, teams | Task hierarchy, assignments, progress tracking | `projects.json` |
+| [Kanban](./mcp-servers/kanban-mcp) | Kanban board with visual interface | Web UI, CLI tools, task management, board statistics, drag-and-drop ready | `kanban_data.json` |
 | [Meeting Notes](./mcp-servers/meeting-notes) | Meetings, agendas, action items | Attendees, notes, action item tracking | `meetings.json` |
 | [Task Automator](./mcp-servers/task-automator) | Workflows and templates | Triggers, template rendering, quick actions | `automator.json` |
 
@@ -225,6 +226,12 @@ mcp-servers/
 │   ├── server.py
 │   └── data/
 │       └── inventory.json     # Products, stock, movements
+├── kanban-mcp/
+│   ├── kanban_server.py
+│   ├── models.py
+│   ├── storage.py
+│   ├── cli.py
+│   └── kanban_data.json       # Boards, tasks, columns
 ├── journal/
 │   ├── server.py
 │   └── data/
@@ -272,6 +279,7 @@ mcp-servers/
 1. Project Manager - Hierarchical tasks, team management
 2. CRM - Multi-entity relationships (leads, deals, customers)
 3. Meeting Notes - Agendas, attendees, action items
+4. Kanban - Web UI, CLI tools, board management
 
 **Advanced**: Sophisticated patterns and algorithms:
 1. Zettelkasten - Link graphs, pathfinding, hub detection
