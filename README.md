@@ -8,6 +8,7 @@
 A collection of production-ready MCP (Model Context Protocol) server examples built with FastMCP, designed to teach you how to create servers that solve real business problems.
 
 Created by **hamishfromatech** - [YouTube](https://youtube.com/@hamishfromatech)
+<a href="https://buymeacoffee.com/hamishfromatech" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 ## What This Repository Is
 
