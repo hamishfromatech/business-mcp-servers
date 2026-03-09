@@ -1,3 +1,41 @@
+# IDE and AI
 .claude
-venv
-.venv
+.vscode/
+.idea/
+
+# Python virtual environments
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Data directories (auto-created by servers)
+mcp-servers/*/data/
+!mcp-servers/*/data/.gitkeep
+
+# Career Manager (stored in user home, but ignore local dev files)
+.career-manager/
+
+# Generated resume files
+*.pdf
+*.docx
+!*.md
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.localenv

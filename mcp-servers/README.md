@@ -34,6 +34,7 @@ python server.py
 
 | Server | Description |
 |--------|-------------|
+| [career-manager](./career-manager) | Career development with resume tracking, job applications, cover letters, and interview prep |
 | [project-manager](./project-manager) | Projects, tasks, milestones, and team management |
 | [meeting-notes](./meeting-notes) | Meetings with agendas, attendees, and action items |
 | [task-automator](./task-automator) | Workflows, templates, triggers, and quick actions |

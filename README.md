@@ -11,7 +11,7 @@ Created by **hamishfromatech** - [YouTube](https://youtube.com/@hamishfromatech)
 
 ## What This Repository Is
 
-This repository contains **15 fully-functional MCP servers** that demonstrate patterns, tools, and resources you can use as reference when building your own MCP servers. Each server is self-contained, well-documented, and showcases different aspects of the MCP protocol.
+This repository contains **17 fully-functional MCP servers** that demonstrate patterns, tools, and resources you can use as reference when building your own MCP servers. Each server is self-contained, well-documented, and showcases different aspects of the MCP protocol.
 
 **The key insight**: These servers don't need to connect to any external applications or services. They're designed to work standalone, proving that you can build powerful, business-valuable MCP servers without complex integrations.
 
@@ -47,6 +47,7 @@ This repository proves that MCP servers can deliver all of this without a single
 
 | Server | Description | Key Features | Data File |
 |--------|-------------|--------------|-----------|
+| [Career Manager](./mcp-servers/career-manager) | Complete career management system | Resume builder, job applications, interview practice, skills inventory, networking | `~/.career-manager/*.json` |
 | [Project Manager](./mcp-servers/project-manager) | Projects, tasks, milestones, teams | Task hierarchy, assignments, progress tracking | `projects.json` |
 | [Meeting Notes](./mcp-servers/meeting-notes) | Meetings, agendas, action items | Attendees, notes, action item tracking | `meetings.json` |
 | [Task Automator](./mcp-servers/task-automator) | Workflows and templates | Triggers, template rendering, quick actions | `automator.json` |
@@ -190,6 +191,10 @@ Knowledge systems use bi-directional linking:
 
 ```
 mcp-servers/
+├── career-manager/
+│   ├── server.py              # Career management with 70+ tools
+│   ├── README.md              # Server-specific documentation
+│   └── pyproject.toml         # Package configuration
 ├── contact-book/
 │   ├── server.py              # Main server implementation
 │   ├── README.md              # Server-specific documentation
@@ -272,6 +277,7 @@ mcp-servers/
 2. Document Wiki - Wiki link parsing, backlinks
 3. Task Automator - Workflows, triggers, template rendering
 4. Skills Server - File system scanning, resource templates, dynamic resource generation
+5. Career Manager - Resume generation, job application tracking, interview practice, skill gap analysis
 
 ## Why FastMCP?
 
