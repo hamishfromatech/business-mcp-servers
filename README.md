@@ -12,7 +12,7 @@ Created by **hamishfromatech** - [YouTube](https://youtube.com/@hamishfromatech)
 
 ## What This Repository Is
 
-This repository contains **19 fully-functional MCP servers** that demonstrate patterns, tools, and resources you can use as reference when building your own MCP servers. Each server is self-contained, well-documented, and showcases different aspects of the MCP protocol.
+This repository contains **22 fully-functional MCP servers** that demonstrate patterns, tools, and resources you can use as reference when building your own MCP servers. Each server is self-contained, well-documented, and showcases different aspects of the MCP protocol.
 
 **The key insight**: These servers don't need to connect to any external applications or services. They're designed to work standalone, proving that you can build powerful, business-valuable MCP servers without complex integrations.
 
@@ -76,6 +76,9 @@ This repository proves that MCP servers can deliver all of this without a single
 | Server | Description | Key Features | Data File |
 |--------|-------------|--------------|-----------|
 | [Skills Server](./mcp-servers/skills-server) | Expose Claude Code skills as MCP resources | Skill discovery, dynamic loading, resource URIs | None (reads filesystem) |
+| [Code Reviewer](./mcp-servers/code-reviewer) | Code review management | Review sessions, issue tracking, code standards | `code_reviewer.json` |
+| [Design Audit](./mcp-servers/design-audit) | Web design auditing | UI/UX issues, design systems, accessibility checks | `design_audit.json` |
+| [Tech Debt Tracker](./mcp-servers/tech-debt-tracker) | Technical debt management | Debt tracking, refactoring tasks, quality metrics | `tech_debt.json` |
 
 ## Quick Start
 
@@ -264,8 +267,23 @@ mcp-servers/
 │   ├── server.py
 │   └── data/
 │       └── zettelkasten.json  # Notes, links, tags
-└── skills-server/
-    └── server.py              # No persistence (reads from filesystem)
+├── skills-server/
+│   └── server.py              # No persistence (reads from filesystem)
+├── code-reviewer/
+│   ├── server.py
+│   ├── README.md
+│   └── data/
+│       └── code_reviewer.json # Reviews, issues, standards
+├── design-audit/
+│   ├── server.py
+│   ├── README.md
+│   └── data/
+│       └── design_audit.json  # Audits, issues, design systems
+└── tech-debt-tracker/
+    ├── server.py
+    ├── README.md
+    └── data/
+        └── tech_debt.json     # Debt items, tasks, metrics
 ```
 
 ## Learning Path
@@ -287,6 +305,9 @@ mcp-servers/
 3. Task Automator - Workflows, triggers, template rendering
 4. Skills Server - File system scanning, resource templates, dynamic resource generation
 5. Career Manager - Resume generation, job application tracking, interview practice, skill gap analysis
+6. Code Reviewer - Review sessions, issue tracking with categories/severity, code standards
+7. Design Audit - Design systems, accessibility compliance, WCAG tracking
+8. Tech Debt Tracker - Interest tracking, snapshots, quality metrics
 
 ## Why FastMCP?
 

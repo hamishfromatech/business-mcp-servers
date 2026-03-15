@@ -62,6 +62,9 @@ python server.py
 | Server | Description |
 |--------|-------------|
 | [skills-server](./skills-server) | Expose Claude Code skills as MCP resources |
+| [code-reviewer](./code-reviewer) | Code review management with sessions, issues, and standards |
+| [design-audit](./design-audit) | Web design auditing with UI/UX issues and accessibility checks |
+| [tech-debt-tracker](./tech-debt-tracker) | Technical debt tracking with refactoring tasks and metrics |
 
 ## Configuration
 
@@ -159,6 +162,9 @@ rm mcp-servers/contact-book/data/contacts.json
 2. [document-wiki](./document-wiki) - Wiki link parsing, backlinks
 3. [task-automator](./task-automator) - Workflows, triggers, templates
 4. [skills-server](./skills-server) - Dynamic resource generation
+5. [code-reviewer](./code-reviewer) - Review sessions, issue tracking, code standards
+6. [design-audit](./design-audit) - Design systems, accessibility compliance
+7. [tech-debt-tracker](./tech-debt-tracker) - Debt tracking, snapshots, quality metrics
 
 ## Key Concepts
 
