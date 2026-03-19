@@ -1,7 +1,7 @@
 # Kanban MCP Server
 
 A fully-featured Kanban task management MCP server built with FastMCP, supporting:
-- **Web UI** - Beautiful interactive kanban board interface
+- **Web UI** - Beautiful interactive kanban board interface accessible via localhost URL
 - **CLI Tools** - Command-line friendly views and commands
 - **Native MCP** - Full MCP tool integration for AI assistants
 
@@ -14,7 +14,8 @@ A fully-featured Kanban task management MCP server built with FastMCP, supportin
 - Search and filter tasks
 - Board statistics
 - JSON-based persistence (no database required)
-- Responsive web UI with drag-and-drop ready design
+- **Web UI that runs alongside MCP server** - Accessible via localhost URL
+- Responsive web interface with modern design
 
 ## Installation
 
@@ -36,12 +37,44 @@ For use with Claude Desktop, VS Code MCP, or other MCP clients:
 python kanban_server.py
 ```
 
-### As an HTTP Server
+### As an HTTP Server with Web UI
 
-Run as an HTTP server with web UI access:
+Run as an HTTP server with a browser-accessible web UI:
 
 ```bash
 python kanban_server.py --transport http --port 8000
+```
+
+This will start:
+- MCP server on port 8000 (configurable via `--port`)
+- Web UI on port 3000 (configurable via `--webui-port`)
+
+When the server starts, you'll see output like:
+```
+============================================================
+  Kanban MCP Server Started
+============================================================
+  MCP Transport: http
+  MCP Port: 8000
+  Storage: kanban_data.json
+============================================================
+  🌐 Web UI: http://127.0.0.1:3000
+============================================================
+```
+
+### Web UI Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--webui-port` | Port for web UI | 3000 |
+| `--no-browser` | Don't auto-open browser | false |
+
+```bash
+# Custom web UI port
+python kanban_server.py --transport http --webui-port 8080
+
+# Don't open browser automatically
+python kanban_server.py --transport http --no-browser
 ```
 
 ### As an SSE Server

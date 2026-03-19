@@ -17,9 +17,15 @@ build/
 *.egg-info/
 .eggs/
 
-# Data directories (auto-created by servers)
+# Data directories and files (auto-created by servers)
 mcp-servers/*/data/
+mcp-servers/kanban-mcp/kanban_data.json
+mcp-servers/contact-book/data/contacts.json
 !mcp-servers/*/data/.gitkeep
+
+# Generic patterns for MCP server data files
+*_data.json
+*_data/*.json
 
 # Career Manager (stored in user home, but ignore local dev files)
 .career-manager/

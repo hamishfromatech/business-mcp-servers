@@ -15,14 +15,20 @@ Usage:
 
     # Run as SSE server
     python kanban_server.py --transport sse --port 8000
+
+When running with --webui flag, a web interface will be available at the specified port.
 """
 
 import argparse
 import json
 import uuid
+import threading
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+import urllib.parse
 
 from fastmcp import FastMCP
 from fastmcp.server.apps import AppConfig
@@ -96,8 +102,8 @@ def list_boards() -> str:
         JSON string with list of boards
     """
     boards = storage.list_boards()
-    data = self._read_data() if hasattr(storage, '_read_data') else {}
-    default_id = storage._read_data().get("default_board_id") if hasattr(storage, '_read_data') else None
+    data = storage._read_data() if hasattr(storage, '_read_data') else {}
+    default_id = data.get("default_board_id")
 
     return json.dumps({
         "boards": [b.to_dict() for b in boards],
@@ -538,775 +544,6 @@ def get_default_board_resource() -> str:
 
 
 # =============================================================================
-# UI Resources - Web Interface
-# =============================================================================
-
-KANBAN_UI_HTML = '''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kanban Board</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            min-height: 100vh;
-            color: #e0e0e0;
-        }
-
-        .container {
-            max-width: 1600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 16px;
-            backdrop-filter: blur(10px);
-        }
-
-        h1 {
-            font-size: 28px;
-            font-weight: 600;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .board-selector {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        select, button, input {
-            padding: 10px 16px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(255, 255, 255, 0.08);
-            color: #e0e0e0;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        select:hover, button:hover {
-            background: rgba(255, 255, 255, 0.12);
-        }
-
-        button.primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-            font-weight: 500;
-        }
-
-        button.primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .board {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-        }
-
-        .column {
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 16px;
-            padding: 20px;
-            min-height: 500px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .column-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
-            border-bottom: 2px solid;
-        }
-
-        .column-header h2 {
-            font-size: 16px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .column-header .count {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-        }
-
-        .column.todo .column-header { border-color: #6366f1; }
-        .column.in_progress .column-header { border-color: #f59e0b; }
-        .column.review .column-header { border-color: #8b5cf6; }
-        .column.done .column-header { border-color: #10b981; }
-
-        .tasks {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .task {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 16px;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .task:hover {
-            background: rgba(255, 255, 255, 0.08);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        }
-
-        .task-title {
-            font-weight: 500;
-            margin-bottom: 8px;
-        }
-
-        .task-description {
-            font-size: 13px;
-            color: #a0a0a0;
-            margin-bottom: 12px;
-        }
-
-        .task-meta {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .tag {
-            background: rgba(99, 102, 241, 0.2);
-            color: #818cf8;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-        }
-
-        .priority {
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 500;
-        }
-
-        .priority.low { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-        .priority.medium { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
-        .priority.high { background: rgba(239, 68, 68, 0.2); color: #f87171; }
-        .priority.urgent { background: rgba(239, 68, 68, 0.4); color: #ef4444; }
-
-        .assignee {
-            font-size: 12px;
-            color: #a0a0a0;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .assignee::before {
-            content: "👤";
-            font-size: 10px;
-        }
-
-        /* Modal */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.3s;
-        }
-
-        .modal-overlay.active {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .modal {
-            background: #1e1e2e;
-            border-radius: 16px;
-            padding: 24px;
-            width: 100%;
-            max-width: 500px;
-            transform: scale(0.9);
-            transition: transform 0.3s;
-        }
-
-        .modal-overlay.active .modal {
-            transform: scale(1);
-        }
-
-        .modal h2 {
-            margin-bottom: 20px;
-            font-size: 20px;
-        }
-
-        .form-group {
-            margin-bottom: 16px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 14px;
-            color: #a0a0a0;
-        }
-
-        .form-group input,
-        .form-group textarea,
-        .form-group select {
-            width: 100%;
-            padding: 12px;
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #e0e0e0;
-        }
-
-        .form-group textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
-
-        .modal-actions {
-            display: flex;
-            gap: 12px;
-            justify-content: flex-end;
-            margin-top: 24px;
-        }
-
-        .stats-bar {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 20px;
-            padding: 16px;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 12px;
-        }
-
-        .stat {
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 24px;
-            font-weight: 600;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .stat-label {
-            font-size: 12px;
-            color: #a0a0a0;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 40px 20px;
-            color: #666;
-        }
-
-        .empty-state p {
-            margin-bottom: 16px;
-        }
-
-        @media (max-width: 1200px) {
-            .board {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-
-        @media (max-width: 768px) {
-            .board {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>📋 Kanban Board</h1>
-            <div class="board-selector">
-                <select id="boardSelect">
-                    <option value="">Loading boards...</option>
-                </select>
-                <button class="primary" onclick="openCreateTaskModal()">+ New Task</button>
-                <button onclick="openCreateBoardModal()">+ New Board</button>
-            </div>
-        </header>
-
-        <div class="stats-bar" id="statsBar">
-            <div class="stat">
-                <div class="stat-value" id="totalTasks">0</div>
-                <div class="stat-label">Total Tasks</div>
-            </div>
-            <div class="stat">
-                <div class="stat-value" id="todoCount">0</div>
-                <div class="stat-label">To Do</div>
-            </div>
-            <div class="stat">
-                <div class="stat-value" id="inProgressCount">0</div>
-                <div class="stat-label">In Progress</div>
-            </div>
-            <div class="stat">
-                <div class="stat-value" id="reviewCount">0</div>
-                <div class="stat-label">Review</div>
-            </div>
-            <div class="stat">
-                <div class="stat-value" id="doneCount">0</div>
-                <div class="stat-label">Done</div>
-            </div>
-        </div>
-
-        <div class="board" id="board">
-            <div class="column todo">
-                <div class="column-header">
-                    <h2>📋 To Do</h2>
-                    <span class="count" id="todoCountBadge">0</span>
-                </div>
-                <div class="tasks" id="todoTasks"></div>
-            </div>
-
-            <div class="column in_progress">
-                <div class="column-header">
-                    <h2>🔄 In Progress</h2>
-                    <span class="count" id="inProgressCountBadge">0</span>
-                </div>
-                <div class="tasks" id="inProgressTasks"></div>
-            </div>
-
-            <div class="column review">
-                <div class="column-header">
-                    <h2>👀 Review</h2>
-                    <span class="count" id="reviewCountBadge">0</span>
-                </div>
-                <div class="tasks" id="reviewTasks"></div>
-            </div>
-
-            <div class="column done">
-                <div class="column-header">
-                    <h2>✅ Done</h2>
-                    <span class="count" id="doneCountBadge">0</span>
-                </div>
-                <div class="tasks" id="doneTasks"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Create Task Modal -->
-    <div class="modal-overlay" id="createTaskModal">
-        <div class="modal">
-            <h2>Create New Task</h2>
-            <form id="createTaskForm">
-                <div class="form-group">
-                    <label>Title *</label>
-                    <input type="text" id="taskTitle" required placeholder="Enter task title">
-                </div>
-                <div class="form-group">
-                    <label>Description</label>
-                    <textarea id="taskDescription" placeholder="Enter task description"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>Status</label>
-                    <select id="taskStatus">
-                        <option value="todo">To Do</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="review">Review</option>
-                        <option value="done">Done</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Priority</label>
-                    <select id="taskPriority">
-                        <option value="low">Low</option>
-                        <option value="medium" selected>Medium</option>
-                        <option value="high">High</option>
-                        <option value="urgent">Urgent</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Assignee</label>
-                    <input type="text" id="taskAssignee" placeholder="Assignee name">
-                </div>
-                <div class="form-group">
-                    <label>Tags (comma-separated)</label>
-                    <input type="text" id="taskTags" placeholder="tag1, tag2, tag3">
-                </div>
-                <div class="modal-actions">
-                    <button type="button" onclick="closeCreateTaskModal()">Cancel</button>
-                    <button type="submit" class="primary">Create Task</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Create Board Modal -->
-    <div class="modal-overlay" id="createBoardModal">
-        <div class="modal">
-            <h2>Create New Board</h2>
-            <form id="createBoardForm">
-                <div class="form-group">
-                    <label>Board Name *</label>
-                    <input type="text" id="boardName" required placeholder="Enter board name">
-                </div>
-                <div class="form-group">
-                    <label>Description</label>
-                    <textarea id="boardDescription" placeholder="Enter board description"></textarea>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" onclick="closeCreateBoardModal()">Cancel</button>
-                    <button type="submit" class="primary">Create Board</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Task Detail Modal -->
-    <div class="modal-overlay" id="taskDetailModal">
-        <div class="modal">
-            <h2 id="taskDetailTitle">Task Details</h2>
-            <div id="taskDetailContent"></div>
-            <div class="modal-actions">
-                <button onclick="closeTaskDetailModal()">Close</button>
-                <button id="deleteTaskBtn" class="primary" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">Delete Task</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        let currentBoardId = null;
-        let boards = [];
-        let currentTaskId = null;
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            loadBoards();
-
-            // Form handlers
-            document.getElementById('createTaskForm').addEventListener('submit', handleCreateTask);
-            document.getElementById('createBoardForm').addEventListener('submit', handleCreateBoard);
-        });
-
-        async function loadBoards() {
-            try {
-                const response = await window.mcp.callTool('list_boards', {});
-                const data = JSON.parse(response.content[0].text);
-                boards = data.boards || [];
-
-                const select = document.getElementById('boardSelect');
-                select.innerHTML = '';
-
-                if (boards.length === 0) {
-                    // Create default board
-                    await createDefaultBoard();
-                    return;
-                }
-
-                boards.forEach(board => {
-                    const option = document.createElement('option');
-                    option.value = board.id;
-                    option.textContent = board.name;
-                    if (board.id === data.default_board_id) {
-                        option.selected = true;
-                        currentBoardId = board.id;
-                    }
-                    select.appendChild(option);
-                });
-
-                loadBoardData();
-            } catch (error) {
-                console.error('Error loading boards:', error);
-            }
-        }
-
-        async function createDefaultBoard() {
-            try {
-                const response = await window.mcp.callTool('create_board', {
-                    name: 'My Kanban Board',
-                    description: 'Default kanban board'
-                });
-                loadBoards();
-            } catch (error) {
-                console.error('Error creating default board:', error);
-            }
-        }
-
-        async function loadBoardData() {
-            if (!currentBoardId) return;
-
-            try {
-                const response = await window.mcp.callTool('get_board', { board_id: currentBoardId });
-                const data = JSON.parse(response.content[0].text);
-
-                if (data.board) {
-                    renderBoard(data.board, data.statistics);
-                }
-            } catch (error) {
-                console.error('Error loading board:', error);
-            }
-        }
-
-        function renderBoard(board, stats) {
-            // Update stats
-            document.getElementById('totalTasks').textContent = stats?.total_tasks || 0;
-            document.getElementById('todoCount').textContent = stats?.by_status?.todo || 0;
-            document.getElementById('inProgressCount').textContent = stats?.by_status?.in_progress || 0;
-            document.getElementById('reviewCount').textContent = stats?.by_status?.review || 0;
-            document.getElementById('doneCount').textContent = stats?.by_status?.done || 0;
-
-            // Group tasks by status
-            const tasksByStatus = {
-                todo: [],
-                in_progress: [],
-                review: [],
-                done: []
-            };
-
-            board.tasks.forEach(task => {
-                if (tasksByStatus[task.status]) {
-                    tasksByStatus[task.status].push(task);
-                }
-            });
-
-            // Render each column
-            renderColumn('todoTasks', tasksByStatus.todo, 'todoCountBadge');
-            renderColumn('inProgressTasks', tasksByStatus.in_progress, 'inProgressCountBadge');
-            renderColumn('reviewTasks', tasksByStatus.review, 'reviewCountBadge');
-            renderColumn('doneTasks', tasksByStatus.done, 'doneCountBadge');
-        }
-
-        function renderColumn(containerId, tasks, badgeId) {
-            const container = document.getElementById(containerId);
-            const badge = document.getElementById(badgeId);
-
-            badge.textContent = tasks.length;
-
-            if (tasks.length === 0) {
-                container.innerHTML = '<div class="empty-state"><p>No tasks yet</p></div>';
-                return;
-            }
-
-            container.innerHTML = tasks.map(task => `
-                <div class="task" onclick="openTaskDetail('${task.id}')">
-                    <div class="task-title">${escapeHtml(task.title)}</div>
-                    ${task.description ? `<div class="task-description">${escapeHtml(task.description.substring(0, 100))}${task.description.length > 100 ? '...' : ''}</div>` : ''}
-                    <div class="task-meta">
-                        <span class="priority ${task.priority}">${task.priority}</span>
-                        ${task.tags?.slice(0, 2).map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('') || ''}
-                    </div>
-                    ${task.assignee ? `<div class="assignee">${escapeHtml(task.assignee)}</div>` : ''}
-                </div>
-            `).join('');
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // Modal handlers
-        function openCreateTaskModal() {
-            document.getElementById('createTaskModal').classList.add('active');
-            document.getElementById('createTaskForm').reset();
-        }
-
-        function closeCreateTaskModal() {
-            document.getElementById('createTaskModal').classList.remove('active');
-        }
-
-        function openCreateBoardModal() {
-            document.getElementById('createBoardModal').classList.add('active');
-            document.getElementById('createBoardForm').reset();
-        }
-
-        function closeCreateBoardModal() {
-            document.getElementById('createBoardModal').classList.remove('active');
-        }
-
-        async function openTaskDetail(taskId) {
-            currentTaskId = taskId;
-            try {
-                const response = await window.mcp.callTool('get_board', { board_id: currentBoardId });
-                const data = JSON.parse(response.content[0].text);
-                const task = data.board.tasks.find(t => t.id === taskId);
-
-                if (task) {
-                    document.getElementById('taskDetailTitle').textContent = task.title;
-                    document.getElementById('taskDetailContent').innerHTML = `
-                        <div class="form-group">
-                            <label>Status</label>
-                            <select id="detailStatus">
-                                <option value="todo" ${task.status === 'todo' ? 'selected' : ''}>To Do</option>
-                                <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
-                                <option value="review" ${task.status === 'review' ? 'selected' : ''}>Review</option>
-                                <option value="done" ${task.status === 'done' ? 'selected' : ''}>Done</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Description</label>
-                            <p>${task.description || 'No description'}</p>
-                        </div>
-                        <div class="form-group">
-                            <label>Priority</label>
-                            <select id="detailPriority">
-                                <option value="low" ${task.priority === 'low' ? 'selected' : ''}>Low</option>
-                                <option value="medium" ${task.priority === 'medium' ? 'selected' : ''}>Medium</option>
-                                <option value="high" ${task.priority === 'high' ? 'selected' : ''}>High</option>
-                                <option value="urgent" ${task.priority === 'urgent' ? 'selected' : ''}>Urgent</option>
-                            </select>
-                        </div>
-                        ${task.assignee ? `<div class="form-group"><label>Assignee</label><p>${task.assignee}</p></div>` : ''}
-                        ${task.tags?.length ? `<div class="form-group"><label>Tags</label><p>${task.tags.join(', ')}</p></div>` : ''}
-                    `;
-
-                    document.getElementById('taskDetailModal').classList.add('active');
-                }
-            } catch (error) {
-                console.error('Error loading task:', error);
-            }
-        }
-
-        function closeTaskDetailModal() {
-            document.getElementById('taskDetailModal').classList.remove('active');
-            currentTaskId = null;
-        }
-
-        // Form handlers
-        async function handleCreateTask(e) {
-            e.preventDefault();
-
-            const title = document.getElementById('taskTitle').value;
-            const description = document.getElementById('taskDescription').value;
-            const status = document.getElementById('taskStatus').value;
-            const priority = document.getElementById('taskPriority').value;
-            const assignee = document.getElementById('taskAssignee').value;
-            const tagsInput = document.getElementById('taskTags').value;
-            const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t) : [];
-
-            try {
-                await window.mcp.callTool('create_task', {
-                    title,
-                    description: description || null,
-                    board_id: currentBoardId,
-                    status,
-                    priority,
-                    assignee: assignee || null,
-                    tags
-                });
-
-                closeCreateTaskModal();
-                loadBoardData();
-            } catch (error) {
-                console.error('Error creating task:', error);
-                alert('Failed to create task');
-            }
-        }
-
-        async function handleCreateBoard(e) {
-            e.preventDefault();
-
-            const name = document.getElementById('boardName').value;
-            const description = document.getElementById('boardDescription').value;
-
-            try {
-                const response = await window.mcp.callTool('create_board', {
-                    name,
-                    description: description || null
-                });
-
-                closeCreateBoardModal();
-                loadBoards();
-            } catch (error) {
-                console.error('Error creating board:', error);
-                alert('Failed to create board');
-            }
-        }
-
-        // Delete task handler
-        document.getElementById('deleteTaskBtn').addEventListener('click', async () => {
-            if (!currentTaskId) return;
-
-            if (confirm('Are you sure you want to delete this task?')) {
-                try {
-                    await window.mcp.callTool('delete_task', {
-                        task_id: currentTaskId,
-                        board_id: currentBoardId
-                    });
-
-                    closeTaskDetailModal();
-                    loadBoardData();
-                } catch (error) {
-                    console.error('Error deleting task:', error);
-                    alert('Failed to delete task');
-                }
-            }
-        });
-
-        // Board selector handler
-        document.getElementById('boardSelect').addEventListener('change', (e) => {
-            currentBoardId = e.target.value;
-            loadBoardData();
-        });
-    </script>
-</body>
-</html>'''
-
-
-@mcp.resource("ui://kanban/board")
-def kanban_ui() -> str:
-    """Serve the Kanban UI HTML page."""
-    return KANBAN_UI_HTML
-
-
-@mcp.tool(app=AppConfig(resource_uri="ui://kanban/board"))
-def open_kanban_ui() -> str:
-    """Open the Kanban Board UI for interactive task management."""
-    return json.dumps({
-        "success": True,
-        "message": "Opening Kanban Board UI",
-        "ui_resource": "ui://kanban/board"
-    })
-
-
-# =============================================================================
 # CLI Helper Tools
 # =============================================================================
 
@@ -1380,6 +617,287 @@ def cli_board_view(board_id: Optional[str] = None) -> str:
 
 
 # =============================================================================
+# Web UI HTTP Server
+# =============================================================================
+
+# Global storage reference for web server
+_web_storage = None
+_UI_HTML_PATH = None
+
+
+def _get_ui_html_content() -> str:
+    """Load the UI HTML from the index.html file."""
+    global _UI_HTML_PATH
+    if _UI_HTML_PATH and Path(_UI_HTML_PATH).exists():
+        with open(_UI_HTML_PATH, "r", encoding="utf-8") as f:
+            return f.read()
+    # Fallback: look for index.html in the same directory as this script
+    script_dir = Path(__file__).parent
+    index_path = script_dir / "index.html"
+    if index_path.exists():
+        with open(index_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "<html><body><h1>UI not found</h1><p>Please ensure index.html exists.</p></body></html>"
+
+
+class KanbanWebHandler(SimpleHTTPRequestHandler):
+    """HTTP handler for the Kanban web UI and REST API."""
+
+    def log_message(self, format, *args):
+        """Suppress default logging."""
+        pass
+
+    def _send_json(self, data, status=200):
+        """Send JSON response."""
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
+
+    def do_OPTIONS(self):
+        """Handle CORS preflight requests."""
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_GET(self):
+        """Handle GET requests."""
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+
+        if path == "/" or path == "/index.html":
+            self._serve_ui()
+        elif path == "/api/boards":
+            self._get_boards()
+        elif path.startswith("/api/board/"):
+            board_id = path.split("/")[-1]
+            self._get_board(board_id)
+        else:
+            self.send_error(404)
+
+    def do_POST(self):
+        """Handle POST requests."""
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+        try:
+            data = json.loads(body) if body else {}
+        except json.JSONDecodeError:
+            data = {}
+
+        if path == "/api/boards":
+            self._create_board(data)
+        elif path == "/api/tasks":
+            self._create_task(data)
+        elif path.startswith("/api/tasks/"):
+            parts = path.split("/")
+            task_id = parts[-1]
+            self._update_task(task_id, data)
+        elif path.startswith("/api/board/"):
+            parts = path.split("/")
+            board_id = parts[-1]
+            self._set_default_board(board_id)
+        else:
+            self.send_error(404)
+
+    def do_DELETE(self):
+        """Handle DELETE requests."""
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+
+        if path.startswith("/api/tasks/"):
+            parts = path.split("/")
+            task_id = parts[-1]
+            query = urllib.parse.parse_qs(parsed.query)
+            board_id = query.get("board_id", [None])[0]
+            self._delete_task(task_id, board_id)
+        elif path.startswith("/api/boards/"):
+            parts = path.split("/")
+            board_id = parts[-1]
+            self._delete_board(board_id)
+        else:
+            self.send_error(404)
+
+    def _serve_ui(self):
+        """Serve the Kanban UI HTML from index.html file."""
+        html = _get_ui_html_content()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(html.encode())
+
+    def _get_boards(self):
+        """Get all boards."""
+        global _web_storage
+        boards = _web_storage.list_boards()
+        data = _web_storage._read_data() if hasattr(_web_storage, '_read_data') else {}
+        default_id = data.get("default_board_id")
+        self._send_json({
+            "boards": [b.to_dict() for b in boards],
+            "default_board_id": default_id,
+            "count": len(boards)
+        })
+
+    def _get_board(self, board_id: str):
+        """Get a specific board."""
+        global _web_storage
+        board = _web_storage.get_board(board_id) if board_id else _web_storage.get_default_board()
+        if board:
+            self._send_json({
+                "board": board.to_dict(),
+                "statistics": _web_storage.get_statistics(board.id)
+            })
+        else:
+            self._send_json({"error": "Board not found"}, 404)
+
+    def _create_board(self, data: dict):
+        """Create a new board."""
+        global _web_storage
+        name = data.get("name", "New Board")
+        description = data.get("description")
+        board = _web_storage.create_board(name, description)
+        self._send_json({
+            "success": True,
+            "board": board.to_dict(),
+            "message": f"Created board '{name}'"
+        })
+
+    def _create_task(self, data: dict):
+        """Create a new task."""
+        global _web_storage
+        board_id = data.get("board_id")
+        if board_id:
+            board = _web_storage.get_board(board_id)
+        else:
+            board = _web_storage.get_default_board()
+            if not board:
+                board = _web_storage.create_board("Default Board", "Default kanban board")
+
+        try:
+            task_status = TaskStatus(data.get("status", "todo"))
+        except ValueError:
+            task_status = TaskStatus.TODO
+
+        try:
+            task_priority = TaskPriority(data.get("priority", "medium"))
+        except ValueError:
+            task_priority = TaskPriority.MEDIUM
+
+        task = Task(
+            id=str(uuid.uuid4())[:8],
+            title=data.get("title", "Untitled"),
+            description=data.get("description"),
+            status=task_status,
+            priority=task_priority,
+            tags=data.get("tags", []),
+            assignee=data.get("assignee"),
+        )
+
+        added_task = _web_storage.add_task(board.id, task)
+        if added_task:
+            self._send_json({
+                "success": True,
+                "task": added_task.to_dict(),
+                "board_id": board.id,
+                "message": f"Created task '{task.title}'"
+            })
+        else:
+            self._send_json({"error": "Failed to create task"}, 500)
+
+    def _update_task(self, task_id: str, data: dict):
+        """Update a task."""
+        global _web_storage
+        board_id = data.get("board_id")
+        if board_id:
+            board = _web_storage.get_board(board_id)
+        else:
+            board = _web_storage.get_default_board()
+
+        if not board:
+            self._send_json({"error": "Board not found"}, 404)
+            return
+
+        updates = {}
+        if "title" in data:
+            updates["title"] = data["title"]
+        if "description" in data:
+            updates["description"] = data["description"]
+        if "status" in data:
+            try:
+                updates["status"] = TaskStatus(data["status"])
+            except ValueError:
+                pass
+        if "priority" in data:
+            try:
+                updates["priority"] = TaskPriority(data["priority"])
+            except ValueError:
+                pass
+        if "tags" in data:
+            updates["tags"] = data["tags"]
+        if "assignee" in data:
+            updates["assignee"] = data["assignee"]
+
+        updated_task = _web_storage.update_task(board.id, task_id, **updates)
+        if updated_task:
+            self._send_json({
+                "success": True,
+                "task": updated_task.to_dict(),
+                "message": f"Updated task {task_id}"
+            })
+        else:
+            self._send_json({"error": "Task not found"}, 404)
+
+    def _delete_task(self, task_id: str, board_id: str = None):
+        """Delete a task."""
+        global _web_storage
+        if board_id:
+            board = _web_storage.get_board(board_id)
+        else:
+            board = _web_storage.get_default_board()
+
+        if not board:
+            self._send_json({"error": "Board not found"}, 404)
+            return
+
+        if _web_storage.delete_task(board.id, task_id):
+            self._send_json({"success": True, "message": f"Deleted task {task_id}"})
+        else:
+            self._send_json({"error": "Task not found"}, 404)
+
+    def _delete_board(self, board_id: str):
+        """Delete a board."""
+        global _web_storage
+        if _web_storage.delete_board(board_id):
+            self._send_json({"success": True, "message": f"Deleted board {board_id}"})
+        else:
+            self._send_json({"error": "Board not found"}, 404)
+
+    def _set_default_board(self, board_id: str):
+        """Set a board as default."""
+        global _web_storage
+        if _web_storage.set_default_board(board_id):
+            self._send_json({"success": True, "message": f"Set board {board_id} as default"})
+        else:
+            self._send_json({"error": "Board not found"}, 404)
+
+
+def run_web_server(host: str, port: int, storage_instance: KanbanStorage):
+    """Run the web UI HTTP server."""
+    global _web_storage
+    _web_storage = storage_instance
+    server = HTTPServer((host, port), KanbanWebHandler)
+    server.serve_forever()
+
+
+# =============================================================================
 # Main Entry Point
 # =============================================================================
 
@@ -1396,7 +914,13 @@ def main():
         "--port",
         type=int,
         default=8000,
-        help="Port for HTTP/SSE transport"
+        help="Port for MCP HTTP/SSE transport"
+    )
+    parser.add_argument(
+        "--webui-port",
+        type=int,
+        default=3000,
+        help="Port for web UI (default: 3000)"
     )
     parser.add_argument(
         "--host",
@@ -1408,22 +932,52 @@ def main():
         default="kanban_data.json",
         help="Path to JSON storage file"
     )
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Don't open browser automatically"
+    )
 
     args = parser.parse_args()
 
     # Update storage path if provided
+    global storage
     if args.storage != "kanban_data.json":
-        global storage
         storage = KanbanStorage(args.storage)
 
-    # Run the server
+    # For stdio mode, just run the MCP server
     if args.transport == "stdio":
         mcp.run()
-    elif args.transport in ["http", "sse", "streamable-http"]:
-        print(f"Starting Kanban MCP Server on {args.host}:{args.port}")
-        print(f"Transport: {args.transport}")
-        print(f"Storage: {args.storage}")
-        print(f"UI available at: ui://kanban/board")
+    else:
+        # For HTTP/SSE modes, start web UI server alongside MCP server
+        webui_url = f"http://{args.host}:{args.webui_port}"
+
+        # Start web UI server in a background thread
+        web_thread = threading.Thread(
+            target=run_web_server,
+            args=(args.host, args.webui_port, storage),
+            daemon=True
+        )
+        web_thread.start()
+
+        print(f"\n{'='*60}")
+        print(f"  Kanban MCP Server Started")
+        print(f"{'='*60}")
+        print(f"  MCP Transport: {args.transport}")
+        print(f"  MCP Port: {args.port}")
+        print(f"  Storage: {args.storage}")
+        print(f"{'='*60}")
+        print(f"  🌐 Web UI: {webui_url}")
+        print(f"{'='*60}\n")
+
+        # Open browser if not disabled
+        if not args.no_browser:
+            try:
+                webbrowser.open(webui_url)
+            except Exception:
+                pass  # Browser might not be available
+
+        # Run the MCP server
         mcp.run(transport=args.transport, host=args.host, port=args.port)
 
 
