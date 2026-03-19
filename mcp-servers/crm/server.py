@@ -8,12 +8,78 @@ from typing import Optional
 from pathlib import Path
 import json
 from enum import Enum
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="CRM",
     instructions="A CRM server for managing leads, deals, customers, and interactions."
 )
+
+
+class LeadStatus(str, Enum):
+    NEW = "new"
+    CONTACTED = "contacted"
+    QUALIFIED = "qualified"
+    LOST = "lost"
+    CONVERTED = "converted"
+
+
+class DealStage(str, Enum):
+    PROSPECTING = "prospecting"
+    QUALIFICATION = "qualification"
+    PROPOSAL = "proposal"
+    NEGOTIATION = "negotiation"
+    CLOSED_WON = "closed_won"
+    CLOSED_LOST = "closed_lost"
+
+
+class Lead(BaseModel):
+    """A lead in the CRM."""
+    id: int
+    name: str
+    email: str
+    phone: Optional[str] = None
+    company: Optional[str] = None
+    source: Optional[str] = None
+    status: str
+    notes: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class Deal(BaseModel):
+    """A deal in the CRM."""
+    id: int
+    title: str
+    customer_id: Optional[int] = None
+    value: float
+    stage: str
+    expected_close_date: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class Customer(BaseModel):
+    """A customer in the CRM."""
+    id: int
+    name: str
+    email: str
+    phone: Optional[str] = None
+    company: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class Interaction(BaseModel):
+    """An interaction with a customer."""
+    id: int
+    customer_id: int
+    deal_id: Optional[int] = None
+    type: str
+    summary: str
+    created_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -49,23 +115,6 @@ _next_lead_id = _data.get("next_lead_id", 1)
 _next_deal_id = _data.get("next_deal_id", 1)
 _next_customer_id = _data.get("next_customer_id", 1)
 _next_interaction_id = _data.get("next_interaction_id", 1)
-
-
-class LeadStatus(str, Enum):
-    NEW = "new"
-    CONTACTED = "contacted"
-    QUALIFIED = "qualified"
-    LOST = "lost"
-    CONVERTED = "converted"
-
-
-class DealStage(str, Enum):
-    PROSPECTING = "prospecting"
-    QUALIFICATION = "qualification"
-    PROPOSAL = "proposal"
-    NEGOTIATION = "negotiation"
-    CLOSED_WON = "closed_won"
-    CLOSED_LOST = "closed_lost"
 
 
 def _save() -> None:
@@ -114,7 +163,7 @@ def create_lead(
     company: Optional[str] = None,
     source: Optional[str] = None,
     notes: Optional[str] = None
-) -> dict:
+) -> Lead:
     """Create a new lead.
 
     Args:
@@ -129,25 +178,25 @@ def create_lead(
         The created lead
     """
     lead_id = _get_next_lead_id()
-    lead = {
-        "id": lead_id,
-        "name": name,
-        "email": email,
-        "phone": phone,
-        "company": company,
-        "source": source,
-        "status": LeadStatus.NEW.value,
-        "notes": notes,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    leads[lead_id] = lead
+    lead = Lead(
+        id=lead_id,
+        name=name,
+        email=email,
+        phone=phone,
+        company=company,
+        source=source,
+        status=LeadStatus.NEW.value,
+        notes=notes,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    leads[lead_id] = lead.model_dump()
     _save()
     return lead
 
 
 @mcp.tool
-def update_lead_status(lead_id: int, status: str) -> Optional[dict]:
+def update_lead_status(lead_id: int, status: str) -> Optional[Lead]:
     """Update a lead's status.
 
     Args:
@@ -167,11 +216,11 @@ def update_lead_status(lead_id: int, status: str) -> Optional[dict]:
     leads[lead_id]["status"] = status
     leads[lead_id]["updated_at"] = datetime.now().isoformat()
     _save()
-    return leads[lead_id]
+    return Lead(**leads[lead_id])
 
 
 @mcp.tool
-def convert_lead_to_customer(lead_id: int) -> Optional[dict]:
+def convert_lead_to_customer(lead_id: int) -> Optional[Customer]:
     """Convert a qualified lead to a customer.
 
     Args:
@@ -204,7 +253,7 @@ def create_deal(
     value: float = 0.0,
     stage: str = "prospecting",
     expected_close_date: Optional[str] = None
-) -> dict:
+) -> Deal:
     """Create a new deal.
 
     Args:
@@ -222,23 +271,23 @@ def create_deal(
         raise ValueError(f"Invalid stage. Must be one of: {valid_stages}")
 
     deal_id = _get_next_deal_id()
-    deal = {
-        "id": deal_id,
-        "title": title,
-        "customer_id": customer_id,
-        "value": value,
-        "stage": stage,
-        "expected_close_date": expected_close_date,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    deals[deal_id] = deal
+    deal = Deal(
+        id=deal_id,
+        title=title,
+        customer_id=customer_id,
+        value=value,
+        stage=stage,
+        expected_close_date=expected_close_date,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    deals[deal_id] = deal.model_dump()
     _save()
     return deal
 
 
 @mcp.tool
-def update_deal_stage(deal_id: int, stage: str) -> Optional[dict]:
+def update_deal_stage(deal_id: int, stage: str) -> Optional[Deal]:
     """Update a deal's stage.
 
     Args:
@@ -258,7 +307,7 @@ def update_deal_stage(deal_id: int, stage: str) -> Optional[dict]:
     deals[deal_id]["stage"] = stage
     deals[deal_id]["updated_at"] = datetime.now().isoformat()
     _save()
-    return deals[deal_id]
+    return Deal(**deals[deal_id])
 
 
 @mcp.tool
@@ -286,7 +335,7 @@ def create_customer(
     phone: Optional[str] = None,
     company: Optional[str] = None,
     notes: Optional[str] = None
-) -> dict:
+) -> Customer:
     """Create a new customer.
 
     Args:
@@ -300,23 +349,23 @@ def create_customer(
         The created customer
     """
     customer_id = _get_next_customer_id()
-    customer = {
-        "id": customer_id,
-        "name": name,
-        "email": email,
-        "phone": phone,
-        "company": company,
-        "notes": notes,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    customers[customer_id] = customer
+    customer = Customer(
+        id=customer_id,
+        name=name,
+        email=email,
+        phone=phone,
+        company=company,
+        notes=notes,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    customers[customer_id] = customer.model_dump()
     _save()
     return customer
 
 
 @mcp.tool
-def get_customer(customer_id: int) -> Optional[dict]:
+def get_customer(customer_id: int) -> Optional[Customer]:
     """Get a customer by ID.
 
     Args:
@@ -325,7 +374,10 @@ def get_customer(customer_id: int) -> Optional[dict]:
     Returns:
         Customer details or None
     """
-    return customers.get(customer_id)
+    data = customers.get(customer_id)
+    if data is None:
+        return None
+    return Customer(**data)
 
 
 # Interaction Management
@@ -335,7 +387,7 @@ def log_interaction(
     interaction_type: str,
     summary: str,
     deal_id: Optional[int] = None
-) -> dict:
+) -> Interaction:
     """Log an interaction with a customer.
 
     Args:
@@ -348,21 +400,21 @@ def log_interaction(
         The logged interaction
     """
     interaction_id = _get_next_interaction_id()
-    interaction = {
-        "id": interaction_id,
-        "customer_id": customer_id,
-        "deal_id": deal_id,
-        "type": interaction_type,
-        "summary": summary,
-        "created_at": datetime.now().isoformat()
-    }
-    interactions[interaction_id] = interaction
+    interaction = Interaction(
+        id=interaction_id,
+        customer_id=customer_id,
+        deal_id=deal_id,
+        type=interaction_type,
+        summary=summary,
+        created_at=datetime.now().isoformat()
+    )
+    interactions[interaction_id] = interaction.model_dump()
     _save()
     return interaction
 
 
 @mcp.tool
-def get_customer_interactions(customer_id: int) -> list[dict]:
+def get_customer_interactions(customer_id: int) -> list[Interaction]:
     """Get all interactions for a customer.
 
     Args:
@@ -372,7 +424,7 @@ def get_customer_interactions(customer_id: int) -> list[dict]:
         List of interactions
     """
     return [
-        i for i in interactions.values()
+        Interaction(**i) for i in interactions.values()
         if i["customer_id"] == customer_id
     ]
 

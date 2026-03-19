@@ -8,16 +8,13 @@ from typing import Optional
 from pathlib import Path
 import json
 from enum import Enum
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Design Audit",
     instructions="A design audit server for tracking UI/UX issues, managing design systems, accessibility compliance, and maintaining design consistency."
 )
-
-# Data persistence setup
-DATA_DIR = Path(__file__).parent / "data"
-DATA_FILE = DATA_DIR / "design_audit.json"
 
 
 class AuditStatus(str, Enum):
@@ -58,6 +55,73 @@ class WCAGLevel(str, Enum):
     A = "A"
     AA = "AA"
     AAA = "AAA"
+
+
+class Audit(BaseModel):
+    """A design audit session."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    scope: list[str] = []
+    status: str
+    created_at: str
+    updated_at: str
+
+
+class DesignIssue(BaseModel):
+    """A design issue found in an audit."""
+    id: int
+    audit_id: Optional[int] = None
+    type: str
+    priority: str
+    title: str
+    description: str
+    component: Optional[str] = None
+    page_url: Optional[str] = None
+    screenshot_path: Optional[str] = None
+    status: str
+    created_at: str
+    updated_at: str
+
+
+class DesignSystem(BaseModel):
+    """A design system reference."""
+    id: int
+    name: str
+    version: str
+    colors: dict = {}
+    typography: dict = {}
+    spacing: dict = {}
+    components: list = []
+    created_at: str
+
+
+class Component(BaseModel):
+    """A UI component in the design system."""
+    id: int
+    name: str
+    category: str
+    description: Optional[str] = None
+    properties: dict = {}
+    variants: list = []
+    created_at: str
+
+
+class AccessibilityCheck(BaseModel):
+    """An accessibility checklist item."""
+    id: int
+    category: str
+    criterion: str
+    description: str
+    wcag_level: str
+    status: str
+    notes: Optional[str] = None
+    created_at: str
+
+
+# Data persistence setup
+DATA_DIR = Path(__file__).parent / "data"
+DATA_FILE = DATA_DIR / "design.json"
 
 
 def _load_data() -> dict:

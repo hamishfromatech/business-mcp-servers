@@ -7,12 +7,48 @@ from datetime import datetime, timedelta
 from typing import Optional
 from pathlib import Path
 import json
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Time Tracker",
     instructions="A time tracking server for logging time entries, managing projects, and analyzing time usage."
 )
+
+
+class Project(BaseModel):
+    """A project for time tracking."""
+    id: int
+    name: str
+    client: Optional[str] = None
+    color: str
+    billable_rate: Optional[float] = None
+    budget_hours: Optional[float] = None
+    active: bool = True
+    created_at: str
+
+
+class TimeEntry(BaseModel):
+    """A time entry."""
+    id: int
+    project_id: Optional[int] = None
+    description: Optional[str] = None
+    duration_minutes: int
+    duration_formatted: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    date: str
+    tags: list[str] = []
+    billable: bool = True
+    created_at: str
+
+
+class ActiveTimer(BaseModel):
+    """An active timer."""
+    project_id: Optional[int] = None
+    description: Optional[str] = None
+    tags: list[str] = []
+    started_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -118,7 +154,7 @@ def create_project(
     color: Optional[str] = None,
     billable_rate: Optional[float] = None,
     budget_hours: Optional[float] = None
-) -> dict:
+) -> Project:
     """Create a new project.
 
     Args:
@@ -132,23 +168,23 @@ def create_project(
         The created project
     """
     project_id = _get_next_project_id()
-    project = {
-        "id": project_id,
-        "name": name,
-        "client": client,
-        "color": color or "#3498db",
-        "billable_rate": billable_rate,
-        "budget_hours": budget_hours,
-        "active": True,
-        "created_at": datetime.now().isoformat()
-    }
-    projects[project_id] = project
+    project = Project(
+        id=project_id,
+        name=name,
+        client=client,
+        color=color or "#3498db",
+        billable_rate=billable_rate,
+        budget_hours=budget_hours,
+        active=True,
+        created_at=datetime.now().isoformat()
+    )
+    projects[project_id] = project.model_dump()
     _save()
     return project
 
 
 @mcp.tool
-def get_project(project_id: int) -> Optional[dict]:
+def get_project(project_id: int) -> Optional[Project]:
     """Get a project by ID.
 
     Args:
@@ -157,7 +193,9 @@ def get_project(project_id: int) -> Optional[dict]:
     Returns:
         Project details or None
     """
-    return projects.get(project_id)
+    if project_id in projects:
+        return Project(**projects[project_id])
+    return None
 
 
 @mcp.tool
@@ -169,7 +207,7 @@ def update_project(
     billable_rate: Optional[float] = None,
     budget_hours: Optional[float] = None,
     active: Optional[bool] = None
-) -> Optional[dict]:
+) -> Optional[Project]:
     """Update a project.
 
     Args:
@@ -202,11 +240,11 @@ def update_project(
         project["active"] = active
     _save()
 
-    return project
+    return Project(**project)
 
 
 @mcp.tool
-def list_projects(active_only: bool = True) -> list[dict]:
+def list_projects(active_only: bool = True) -> list[Project]:
     """List all projects.
 
     Args:
@@ -218,7 +256,7 @@ def list_projects(active_only: bool = True) -> list[dict]:
     result = list(projects.values())
     if active_only:
         result = [p for p in result if p.get("active")]
-    return result
+    return [Project(**p) for p in result]
 
 
 @mcp.tool
@@ -244,7 +282,7 @@ def start_timer(
     project_id: Optional[int] = None,
     description: Optional[str] = None,
     tags: Optional[list[str]] = None
-) -> dict:
+) -> ActiveTimer:
     """Start a new time tracking timer.
 
     Args:
@@ -269,11 +307,11 @@ def start_timer(
     }
     _save()
 
-    return active_timer
+    return ActiveTimer(**active_timer)
 
 
 @mcp.tool
-def stop_timer() -> Optional[dict]:
+def stop_timer() -> Optional[TimeEntry]:
     """Stop the active timer and create a time entry.
 
     Returns:
@@ -303,7 +341,7 @@ def stop_timer() -> Optional[dict]:
 
 
 @mcp.tool
-def get_active_timer() -> Optional[dict]:
+def get_active_timer() -> Optional[ActiveTimer]:
     """Get the currently active timer.
 
     Returns:
@@ -312,14 +350,7 @@ def get_active_timer() -> Optional[dict]:
     if not active_timer:
         return None
 
-    started = datetime.fromisoformat(active_timer["started_at"])
-    elapsed = datetime.now() - started
-    elapsed_minutes = int(elapsed.total_seconds() / 60)
-
-    result = active_timer.copy()
-    result["elapsed_minutes"] = elapsed_minutes
-    result["elapsed_formatted"] = _format_duration(elapsed_minutes)
-    return result
+    return ActiveTimer(**active_timer)
 
 
 @mcp.tool
@@ -333,7 +364,7 @@ def log_time(
     date: Optional[str] = None,
     tags: Optional[list[str]] = None,
     billable: bool = True
-) -> dict:
+) -> TimeEntry:
     """Log a time entry manually.
 
     Args:
@@ -365,26 +396,26 @@ def log_time(
         entry_date = datetime.now().strftime("%Y-%m-%d")
 
     entry_id = _get_next_entry_id()
-    entry = {
-        "id": entry_id,
-        "project_id": project_id,
-        "description": description,
-        "duration_minutes": duration_minutes,
-        "duration_formatted": _format_duration(duration_minutes),
-        "start_time": start_time,
-        "end_time": end_time,
-        "date": entry_date,
-        "tags": tags or [],
-        "billable": billable,
-        "created_at": datetime.now().isoformat()
-    }
-    time_entries[entry_id] = entry
+    entry = TimeEntry(
+        id=entry_id,
+        project_id=project_id,
+        description=description,
+        duration_minutes=duration_minutes,
+        duration_formatted=_format_duration(duration_minutes),
+        start_time=start_time,
+        end_time=end_time,
+        date=entry_date,
+        tags=tags or [],
+        billable=billable,
+        created_at=datetime.now().isoformat()
+    )
+    time_entries[entry_id] = entry.model_dump()
     _save()
     return entry
 
 
 @mcp.tool
-def get_time_entry(entry_id: int) -> Optional[dict]:
+def get_time_entry(entry_id: int) -> Optional[TimeEntry]:
     """Get a time entry by ID.
 
     Args:
@@ -393,7 +424,9 @@ def get_time_entry(entry_id: int) -> Optional[dict]:
     Returns:
         Time entry details or None
     """
-    return time_entries.get(entry_id)
+    if entry_id in time_entries:
+        return TimeEntry(**time_entries[entry_id])
+    return None
 
 
 @mcp.tool
@@ -405,7 +438,7 @@ def update_time_entry(
     date: Optional[str] = None,
     tags: Optional[list[str]] = None,
     billable: Optional[bool] = None
-) -> Optional[dict]:
+) -> Optional[TimeEntry]:
     """Update a time entry.
 
     Args:
@@ -439,7 +472,7 @@ def update_time_entry(
         entry["billable"] = billable
     _save()
 
-    return entry
+    return TimeEntry(**entry)
 
 
 @mcp.tool
@@ -465,7 +498,7 @@ def list_time_entries(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     limit: int = 50
-) -> list[dict]:
+) -> list[TimeEntry]:
     """List time entries with filters.
 
     Args:
@@ -487,7 +520,7 @@ def list_time_entries(
         result = [e for e in result if e["date"] <= end_date]
 
     result.sort(key=lambda x: x["date"], reverse=True)
-    return result[:limit]
+    return [TimeEntry(**e) for e in result[:limit]]
 
 
 # Reporting

@@ -8,12 +8,74 @@ from typing import Optional
 from pathlib import Path
 import json
 from enum import Enum
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Inventory Manager",
     instructions="An inventory management server for tracking products, stock levels, and inventory movements."
 )
+
+
+class MovementType(str, Enum):
+    IN = "in"
+    OUT = "out"
+    TRANSFER = "transfer"
+
+
+class Product(BaseModel):
+    """A product in inventory."""
+    id: int
+    name: str
+    sku: str
+    quantity: int
+    price: float
+    category_id: Optional[int] = None
+    location_id: Optional[int] = None
+    low_stock_threshold: int = 10
+    description: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class Category(BaseModel):
+    """A product category."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    created_at: str
+
+
+class Location(BaseModel):
+    """A storage location."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    created_at: str
+
+
+class Movement(BaseModel):
+    """An inventory movement record."""
+    id: int
+    type: str
+    product_id: int
+    product_name: str
+    quantity: int
+    notes: Optional[str] = None
+    to_location_id: Optional[int] = None
+    created_at: str
+
+
+class Alert(BaseModel):
+    """A low stock alert."""
+    id: int
+    type: str
+    product_id: int
+    product_name: str
+    current_quantity: int
+    threshold: int
+    created_at: str
+    resolved: bool = False
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -52,12 +114,6 @@ _next_category_id = _data.get("next_category_id", 1)
 _next_location_id = _data.get("next_location_id", 1)
 _next_movement_id = _data.get("next_movement_id", 1)
 _next_alert_id = _data.get("next_alert_id", 1)
-
-
-class MovementType(str, Enum):
-    IN = "in"
-    OUT = "out"
-    TRANSFER = "transfer"
 
 
 def _save() -> None:
@@ -142,7 +198,7 @@ def _check_low_stock(product_id: int) -> Optional[dict]:
 
 # Category Management
 @mcp.tool
-def create_category(name: str, description: Optional[str] = None) -> dict:
+def create_category(name: str, description: Optional[str] = None) -> Category:
     """Create a product category.
 
     Args:
@@ -153,30 +209,30 @@ def create_category(name: str, description: Optional[str] = None) -> dict:
         The created category
     """
     category_id = _get_next_category_id()
-    category = {
-        "id": category_id,
-        "name": name,
-        "description": description,
-        "created_at": datetime.now().isoformat()
-    }
-    categories[category_id] = category
+    category = Category(
+        id=category_id,
+        name=name,
+        description=description,
+        created_at=datetime.now().isoformat()
+    )
+    categories[category_id] = category.model_dump()
     _save()
     return category
 
 
 @mcp.tool
-def list_categories() -> list[dict]:
+def list_categories() -> list[Category]:
     """List all categories.
 
     Returns:
         List of categories
     """
-    return list(categories.values())
+    return [Category(**c) for c in categories.values()]
 
 
 # Location Management
 @mcp.tool
-def create_location(name: str, description: Optional[str] = None) -> dict:
+def create_location(name: str, description: Optional[str] = None) -> Location:
     """Create a storage location.
 
     Args:
@@ -187,25 +243,25 @@ def create_location(name: str, description: Optional[str] = None) -> dict:
         The created location
     """
     location_id = _get_next_location_id()
-    location = {
-        "id": location_id,
-        "name": name,
-        "description": description,
-        "created_at": datetime.now().isoformat()
-    }
-    locations[location_id] = location
+    location = Location(
+        id=location_id,
+        name=name,
+        description=description,
+        created_at=datetime.now().isoformat()
+    )
+    locations[location_id] = location.model_dump()
     _save()
     return location
 
 
 @mcp.tool
-def list_locations() -> list[dict]:
+def list_locations() -> list[Location]:
     """List all storage locations.
 
     Returns:
         List of locations
     """
-    return list(locations.values())
+    return [Location(**loc) for loc in locations.values()]
 
 
 # Product Management
@@ -219,7 +275,7 @@ def create_product(
     location_id: Optional[int] = None,
     low_stock_threshold: int = 10,
     description: Optional[str] = None
-) -> dict:
+) -> Product:
     """Create a new product.
 
     Args:
@@ -241,20 +297,20 @@ def create_product(
             raise ValueError(f"Product with SKU {sku} already exists")
 
     product_id = _get_next_product_id()
-    product = {
-        "id": product_id,
-        "name": name,
-        "sku": sku,
-        "quantity": quantity,
-        "price": price,
-        "category_id": category_id,
-        "location_id": location_id,
-        "low_stock_threshold": low_stock_threshold,
-        "description": description,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    products[product_id] = product
+    product = Product(
+        id=product_id,
+        name=name,
+        sku=sku,
+        quantity=quantity,
+        price=price,
+        category_id=category_id,
+        location_id=location_id,
+        low_stock_threshold=low_stock_threshold,
+        description=description,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    products[product_id] = product.model_dump()
 
     # Check for low stock alert
     _check_low_stock(product_id)
@@ -264,7 +320,7 @@ def create_product(
 
 
 @mcp.tool
-def get_product(product_id: int) -> Optional[dict]:
+def get_product(product_id: int) -> Optional[Product]:
     """Get a product by ID.
 
     Args:
@@ -273,11 +329,13 @@ def get_product(product_id: int) -> Optional[dict]:
     Returns:
         Product details or None
     """
-    return products.get(product_id)
+    if product_id in products:
+        return Product(**products[product_id])
+    return None
 
 
 @mcp.tool
-def get_product_by_sku(sku: str) -> Optional[dict]:
+def get_product_by_sku(sku: str) -> Optional[Product]:
     """Get a product by SKU.
 
     Args:
@@ -288,7 +346,7 @@ def get_product_by_sku(sku: str) -> Optional[dict]:
     """
     for product in products.values():
         if product["sku"] == sku:
-            return product
+            return Product(**product)
     return None
 
 
@@ -301,7 +359,7 @@ def update_product(
     location_id: Optional[int] = None,
     low_stock_threshold: Optional[int] = None,
     description: Optional[str] = None
-) -> Optional[dict]:
+) -> Optional[Product]:
     """Update a product.
 
     Args:
@@ -335,7 +393,7 @@ def update_product(
 
     product["updated_at"] = datetime.now().isoformat()
     _save()
-    return product
+    return Product(**product)
 
 
 @mcp.tool
@@ -360,7 +418,7 @@ def list_products(
     category_id: Optional[int] = None,
     location_id: Optional[int] = None,
     low_stock_only: bool = False
-) -> list[dict]:
+) -> list[Product]:
     """List products with optional filters.
 
     Args:
@@ -380,11 +438,11 @@ def list_products(
     if low_stock_only:
         result = [p for p in result if p["quantity"] <= p.get("low_stock_threshold", 0)]
 
-    return result
+    return [Product(**p) for p in result]
 
 
 @mcp.tool
-def search_products(query: str) -> list[dict]:
+def search_products(query: str) -> list[Product]:
     """Search products by name, SKU, or description.
 
     Args:
@@ -395,7 +453,7 @@ def search_products(query: str) -> list[dict]:
     """
     query_lower = query.lower()
     return [
-        p for p in products.values()
+        Product(**p) for p in products.values()
         if (query_lower in p["name"].lower() or
             query_lower in p["sku"].lower() or
             (p.get("description") and query_lower in p["description"].lower()))
@@ -404,7 +462,7 @@ def search_products(query: str) -> list[dict]:
 
 # Inventory Movement
 @mcp.tool
-def stock_in(product_id: int, quantity: int, notes: Optional[str] = None) -> dict:
+def stock_in(product_id: int, quantity: int, notes: Optional[str] = None) -> Movement:
     """Add stock to a product.
 
     Args:
@@ -426,23 +484,24 @@ def stock_in(product_id: int, quantity: int, notes: Optional[str] = None) -> dic
     product["updated_at"] = datetime.now().isoformat()
 
     movement_id = _get_next_movement_id()
-    movement = {
-        "id": movement_id,
-        "type": MovementType.IN.value,
-        "product_id": product_id,
-        "product_name": product["name"],
-        "quantity": quantity,
-        "notes": notes,
-        "created_at": datetime.now().isoformat()
-    }
-    movements[movement_id] = movement
+    movement = Movement(
+        id=movement_id,
+        type=MovementType.IN.value,
+        product_id=product_id,
+        product_name=product["name"],
+        quantity=quantity,
+        notes=notes,
+        to_location_id=None,
+        created_at=datetime.now().isoformat()
+    )
+    movements[movement_id] = movement.model_dump()
     _save()
 
     return movement
 
 
 @mcp.tool
-def stock_out(product_id: int, quantity: int, notes: Optional[str] = None) -> dict:
+def stock_out(product_id: int, quantity: int, notes: Optional[str] = None) -> Movement:
     """Remove stock from a product.
 
     Args:
@@ -467,16 +526,17 @@ def stock_out(product_id: int, quantity: int, notes: Optional[str] = None) -> di
     product["updated_at"] = datetime.now().isoformat()
 
     movement_id = _get_next_movement_id()
-    movement = {
-        "id": movement_id,
-        "type": MovementType.OUT.value,
-        "product_id": product_id,
-        "product_name": product["name"],
-        "quantity": quantity,
-        "notes": notes,
-        "created_at": datetime.now().isoformat()
-    }
-    movements[movement_id] = movement
+    movement = Movement(
+        id=movement_id,
+        type=MovementType.OUT.value,
+        product_id=product_id,
+        product_name=product["name"],
+        quantity=quantity,
+        notes=notes,
+        to_location_id=None,
+        created_at=datetime.now().isoformat()
+    )
+    movements[movement_id] = movement.model_dump()
 
     # Check for low stock
     _check_low_stock(product_id)
@@ -486,7 +546,7 @@ def stock_out(product_id: int, quantity: int, notes: Optional[str] = None) -> di
 
 
 @mcp.tool
-def transfer_stock(product_id: int, to_location_id: int, quantity: int, notes: Optional[str] = None) -> dict:
+def transfer_stock(product_id: int, to_location_id: int, quantity: int, notes: Optional[str] = None) -> Movement:
     """Transfer stock between locations.
 
     Args:
@@ -508,24 +568,24 @@ def transfer_stock(product_id: int, to_location_id: int, quantity: int, notes: O
     product["updated_at"] = datetime.now().isoformat()
 
     movement_id = _get_next_movement_id()
-    movement = {
-        "id": movement_id,
-        "type": MovementType.TRANSFER.value,
-        "product_id": product_id,
-        "product_name": product["name"],
-        "to_location_id": to_location_id,
-        "quantity": quantity,
-        "notes": notes,
-        "created_at": datetime.now().isoformat()
-    }
-    movements[movement_id] = movement
+    movement = Movement(
+        id=movement_id,
+        type=MovementType.TRANSFER.value,
+        product_id=product_id,
+        product_name=product["name"],
+        quantity=quantity,
+        notes=notes,
+        to_location_id=to_location_id,
+        created_at=datetime.now().isoformat()
+    )
+    movements[movement_id] = movement.model_dump()
     _save()
 
     return movement
 
 
 @mcp.tool
-def get_movement_history(product_id: Optional[int] = None, limit: int = 50) -> list[dict]:
+def get_movement_history(product_id: Optional[int] = None, limit: int = 50) -> list[Movement]:
     """Get inventory movement history.
 
     Args:
@@ -541,22 +601,22 @@ def get_movement_history(product_id: Optional[int] = None, limit: int = 50) -> l
         result = [m for m in result if m.get("product_id") == product_id]
 
     result.sort(key=lambda x: x["created_at"], reverse=True)
-    return result[:limit]
+    return [Movement(**m) for m in result[:limit]]
 
 
 # Alerts
 @mcp.tool
-def get_active_alerts() -> list[dict]:
+def get_active_alerts() -> list[Alert]:
     """Get all active (unresolved) alerts.
 
     Returns:
         List of active alerts
     """
-    return [a for a in alerts.values() if not a.get("resolved")]
+    return [Alert(**a) for a in alerts.values() if not a.get("resolved")]
 
 
 @mcp.tool
-def resolve_alert(alert_id: int) -> Optional[dict]:
+def resolve_alert(alert_id: int) -> Optional[Alert]:
     """Mark an alert as resolved.
 
     Args:
@@ -571,7 +631,7 @@ def resolve_alert(alert_id: int) -> Optional[dict]:
     alerts[alert_id]["resolved"] = True
     alerts[alert_id]["resolved_at"] = datetime.now().isoformat()
     _save()
-    return alerts[alert_id]
+    return Alert(**alerts[alert_id])
 
 
 # Analytics

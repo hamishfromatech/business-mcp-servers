@@ -10,12 +10,23 @@ from datetime import datetime
 from typing import Optional
 from pathlib import Path
 import json
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="File Organizer",
     instructions="A file organization server for categorizing, moving, and managing files."
 )
+
+
+class OrganizationRule(BaseModel):
+    """A file organization rule."""
+    id: int
+    name: str
+    source_pattern: str
+    target_directory: str
+    file_types: list[str] = []
+    created_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -236,7 +247,7 @@ def create_organization_rule(
     source_pattern: str,
     target_directory: str,
     file_types: Optional[list[str]] = None
-) -> dict:
+) -> OrganizationRule:
     """Create a rule for organizing files.
 
     Args:
@@ -249,27 +260,27 @@ def create_organization_rule(
         The created rule
     """
     rule_id = _get_next_rule_id()
-    rule = {
-        "id": rule_id,
-        "name": name,
-        "source_pattern": source_pattern,
-        "target_directory": target_directory,
-        "file_types": file_types or [],
-        "created_at": datetime.now().isoformat()
-    }
-    organization_rules[rule_id] = rule
+    rule = OrganizationRule(
+        id=rule_id,
+        name=name,
+        source_pattern=source_pattern,
+        target_directory=target_directory,
+        file_types=file_types or [],
+        created_at=datetime.now().isoformat()
+    )
+    organization_rules[rule_id] = rule.model_dump()
     _save()
     return rule
 
 
 @mcp.tool
-def list_organization_rules() -> list[dict]:
+def list_organization_rules() -> list[OrganizationRule]:
     """List all organization rules.
 
     Returns:
         List of rules
     """
-    return list(organization_rules.values())
+    return [OrganizationRule(**r) for r in organization_rules.values()]
 
 
 @mcp.tool

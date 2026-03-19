@@ -8,12 +8,40 @@ from typing import Optional
 from pathlib import Path
 import json
 from enum import Enum
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Habit Tracker",
     instructions="A habit tracking server for building and maintaining daily habits with streak tracking."
 )
+
+
+class HabitFrequency(str, Enum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    CUSTOM = "custom"
+
+
+class Habit(BaseModel):
+    """A habit to track."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    frequency: str
+    color: str
+    target_days: Optional[list[int]] = None
+    created_at: str
+    archived: bool = False
+
+
+class CheckIn(BaseModel):
+    """A habit check-in."""
+    habit_id: int
+    date: str
+    completed: bool
+    notes: Optional[str] = None
+    recorded_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -40,12 +68,6 @@ _data = _load_data()
 habits: dict[int, dict] = {int(k): v for k, v in _data.get("habits", {}).items()}
 check_ins: dict[str, dict] = _data.get("check_ins", {})
 _next_habit_id = _data.get("next_habit_id", 1)
-
-
-class HabitFrequency(str, Enum):
-    DAILY = "daily"
-    WEEKLY = "weekly"
-    CUSTOM = "custom"
 
 
 def _save() -> None:
@@ -130,7 +152,7 @@ def create_habit(
     frequency: str = "daily",
     color: Optional[str] = None,
     target_days: Optional[list[int]] = None
-) -> dict:
+) -> Habit:
     """Create a new habit to track.
 
     Args:
@@ -144,23 +166,23 @@ def create_habit(
         The created habit
     """
     habit_id = _get_next_habit_id()
-    habit = {
-        "id": habit_id,
-        "name": name,
-        "description": description,
-        "frequency": frequency,
-        "color": color or "#4CAF50",
-        "target_days": target_days,
-        "created_at": datetime.now().isoformat(),
-        "archived": False
-    }
-    habits[habit_id] = habit
+    habit = Habit(
+        id=habit_id,
+        name=name,
+        description=description,
+        frequency=frequency,
+        color=color or "#4CAF50",
+        target_days=target_days,
+        created_at=datetime.now().isoformat(),
+        archived=False
+    )
+    habits[habit_id] = habit.model_dump()
     _save()
     return habit
 
 
 @mcp.tool
-def get_habit(habit_id: int) -> Optional[dict]:
+def get_habit(habit_id: int) -> Optional[Habit]:
     """Get a habit by ID.
 
     Args:
@@ -175,11 +197,11 @@ def get_habit(habit_id: int) -> Optional[dict]:
     habit = habits[habit_id].copy()
     habit["current_streak"] = _calculate_streak(habit_id)
     habit["completion_rate_30d"] = round(_calculate_completion_rate(habit_id), 1)
-    return habit
+    return Habit(**habit)
 
 
 @mcp.tool
-def list_habits(include_archived: bool = False) -> list[dict]:
+def list_habits(include_archived: bool = False) -> list[Habit]:
     """List all habits.
 
     Args:
@@ -196,7 +218,7 @@ def list_habits(include_archived: bool = False) -> list[dict]:
         habit_data = habit.copy()
         habit_data["current_streak"] = _calculate_streak(habit["id"])
         habit_data["completion_rate_30d"] = round(_calculate_completion_rate(habit["id"]), 1)
-        result.append(habit_data)
+        result.append(Habit(**habit_data))
 
     return result
 
@@ -208,7 +230,7 @@ def update_habit(
     description: Optional[str] = None,
     color: Optional[str] = None,
     archived: Optional[bool] = None
-) -> Optional[dict]:
+) -> Optional[Habit]:
     """Update a habit.
 
     Args:
@@ -235,7 +257,7 @@ def update_habit(
         habit["archived"] = archived
     _save()
 
-    return habit
+    return Habit(**habit)
 
 
 @mcp.tool
@@ -261,7 +283,7 @@ def delete_habit(habit_id: int) -> bool:
 
 # Check-in Management
 @mcp.tool
-def check_in(habit_id: int, date: Optional[str] = None, completed: bool = True, notes: Optional[str] = None) -> dict:
+def check_in(habit_id: int, date: Optional[str] = None, completed: bool = True, notes: Optional[str] = None) -> CheckIn:
     """Record a habit check-in.
 
     Args:
@@ -279,21 +301,21 @@ def check_in(habit_id: int, date: Optional[str] = None, completed: bool = True, 
     date_str = date or datetime.now().strftime("%Y-%m-%d")
     key = _get_checkin_key(habit_id, date_str)
 
-    check_in_record = {
-        "habit_id": habit_id,
-        "date": date_str,
-        "completed": completed,
-        "notes": notes,
-        "recorded_at": datetime.now().isoformat()
-    }
-    check_ins[key] = check_in_record
+    record = CheckIn(
+        habit_id=habit_id,
+        date=date_str,
+        completed=completed,
+        notes=notes,
+        recorded_at=datetime.now().isoformat()
+    )
+    check_ins[key] = record.model_dump()
     _save()
 
-    return check_in_record
+    return record
 
 
 @mcp.tool
-def batch_check_in(habit_ids: list[int], date: Optional[str] = None) -> list[dict]:
+def batch_check_in(habit_ids: list[int], date: Optional[str] = None) -> list[CheckIn]:
     """Check in multiple habits at once.
 
     Args:
@@ -311,13 +333,14 @@ def batch_check_in(habit_ids: list[int], date: Optional[str] = None) -> list[dic
             result = check_in(habit_id, date_str, completed=True)
             results.append(result)
         except ValueError:
-            results.append({"habit_id": habit_id, "error": "Habit not found"})
+            # Skip habits that don't exist, but continue
+            pass
 
     return results
 
 
 @mcp.tool
-def get_check_in(habit_id: int, date: str) -> Optional[dict]:
+def get_check_in(habit_id: int, date: str) -> Optional[CheckIn]:
     """Get a specific check-in.
 
     Args:
@@ -328,11 +351,13 @@ def get_check_in(habit_id: int, date: str) -> Optional[dict]:
         Check-in record or None
     """
     key = _get_checkin_key(habit_id, date)
-    return check_ins.get(key)
+    if key in check_ins:
+        return CheckIn(**check_ins[key])
+    return None
 
 
 @mcp.tool
-def get_habit_history(habit_id: int, days: int = 30) -> list[dict]:
+def get_habit_history(habit_id: int, days: int = 30) -> list[CheckIn]:
     """Get check-in history for a habit.
 
     Args:
@@ -353,13 +378,16 @@ def get_habit_history(habit_id: int, days: int = 30) -> list[dict]:
         date_str = date.strftime("%Y-%m-%d")
         key = _get_checkin_key(habit_id, date_str)
 
-        record = check_ins.get(key, {
-            "habit_id": habit_id,
-            "date": date_str,
-            "completed": False,
-            "notes": None
-        })
-        history.append(record)
+        if key in check_ins:
+            history.append(CheckIn(**check_ins[key]))
+        else:
+            history.append(CheckIn(
+                habit_id=habit_id,
+                date=date_str,
+                completed=False,
+                notes=None,
+                recorded_at=""
+            ))
 
     return history
 

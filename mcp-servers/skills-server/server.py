@@ -9,7 +9,7 @@ from typing import Optional
 from pathlib import Path
 import json
 import re
-from dataclasses import dataclass, asdict
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
@@ -31,8 +31,7 @@ if os.environ.get("SKILLS_PATH"):
         SKILL_DIRS.append(Path(p))
 
 
-@dataclass
-class Skill:
+class Skill(BaseModel):
     """Represents a Claude Code skill."""
     name: str
     description: str
@@ -151,7 +150,7 @@ skills = discover_skills()
 def list_skills(
     category: Optional[str] = None,
     has_scripts: Optional[bool] = None
-) -> list[dict]:
+) -> list[Skill]:
     """List all available skills.
 
     Args:
@@ -159,25 +158,18 @@ def list_skills(
         has_scripts: Filter to skills with/without scripts
 
     Returns:
-        List of skill metadata dictionaries
+        List of skill metadata
     """
     result = []
     for skill in skills.values():
         if has_scripts is not None and skill.has_scripts != has_scripts:
             continue
-        result.append({
-            "name": skill.name,
-            "description": skill.description,
-            "version": skill.version,
-            "has_scripts": skill.has_scripts,
-            "has_references": skill.has_references,
-            "has_assets": skill.has_assets,
-        })
+        result.append(skill)
     return result
 
 
 @mcp.tool
-def get_skill(name: str) -> Optional[dict]:
+def get_skill(name: str) -> Optional[Skill]:
     """Get full details of a specific skill.
 
     Args:
@@ -189,12 +181,12 @@ def get_skill(name: str) -> Optional[dict]:
     name_lower = name.lower().replace(" ", "-")
     skill = skills.get(name_lower)
     if skill:
-        return asdict(skill)
+        return skill
     return None
 
 
 @mcp.tool
-def search_skills(query: str) -> list[dict]:
+def search_skills(query: str) -> list[Skill]:
     """Search skills by name or description.
 
     Args:
@@ -212,11 +204,7 @@ def search_skills(query: str) -> list[dict]:
             query_lower in skill.description.lower() or
             query_lower in skill.content.lower()
         ):
-            results.append({
-                "name": skill.name,
-                "description": skill.description,
-                "version": skill.version,
-            })
+            results.append(skill)
 
     return results
 

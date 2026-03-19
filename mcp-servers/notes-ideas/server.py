@@ -8,12 +8,37 @@ from typing import Optional
 from pathlib import Path
 import json
 import re
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Notes & Ideas",
     instructions="A notes server for capturing ideas, quick notes, and organizing thoughts with tags and folders."
 )
+
+
+class Folder(BaseModel):
+    """A folder for organizing notes."""
+    id: int
+    name: str
+    parent_id: Optional[int] = None
+    color: str
+    created_at: str
+
+
+class Note(BaseModel):
+    """A note or idea."""
+    id: int
+    title: str
+    content: str
+    folder_id: Optional[int] = None
+    tags: list[str] = []
+    is_idea: bool = False
+    priority: Optional[str] = None
+    pinned: bool = False
+    archived: bool = False
+    created_at: str
+    updated_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -72,7 +97,7 @@ def _extract_tags(content: str) -> list[str]:
 
 # Folder Management
 @mcp.tool
-def create_folder(name: str, parent_id: Optional[int] = None, color: Optional[str] = None) -> dict:
+def create_folder(name: str, parent_id: Optional[int] = None, color: Optional[str] = None) -> Folder:
     """Create a folder for organizing notes.
 
     Args:
@@ -84,20 +109,20 @@ def create_folder(name: str, parent_id: Optional[int] = None, color: Optional[st
         The created folder
     """
     folder_id = _get_next_folder_id()
-    folder = {
-        "id": folder_id,
-        "name": name,
-        "parent_id": parent_id,
-        "color": color or "#3498db",
-        "created_at": datetime.now().isoformat()
-    }
-    folders[folder_id] = folder
+    folder = Folder(
+        id=folder_id,
+        name=name,
+        parent_id=parent_id,
+        color=color or "#3498db",
+        created_at=datetime.now().isoformat()
+    )
+    folders[folder_id] = folder.model_dump()
     _save()
     return folder
 
 
 @mcp.tool
-def list_folders(parent_id: Optional[int] = None) -> list[dict]:
+def list_folders(parent_id: Optional[int] = None) -> list[Folder]:
     """List folders, optionally filtered by parent.
 
     Args:
@@ -107,8 +132,8 @@ def list_folders(parent_id: Optional[int] = None) -> list[dict]:
         List of folders
     """
     if parent_id is not None:
-        return [f for f in folders.values() if f.get("parent_id") == parent_id]
-    return list(folders.values())
+        return [Folder(**f) for f in folders.values() if f.get("parent_id") == parent_id]
+    return [Folder(**f) for f in folders.values()]
 
 
 @mcp.tool
@@ -144,7 +169,7 @@ def create_note(
     tags: Optional[list[str]] = None,
     is_idea: bool = False,
     priority: Optional[str] = None
-) -> dict:
+) -> Note:
     """Create a new note or idea.
 
     Args:
@@ -161,26 +186,26 @@ def create_note(
     note_id = _get_next_note_id()
     extracted_tags = tags or _extract_tags(content)
 
-    note = {
-        "id": note_id,
-        "title": title,
-        "content": content,
-        "folder_id": folder_id,
-        "tags": extracted_tags,
-        "is_idea": is_idea,
-        "priority": priority,
-        "pinned": False,
-        "archived": False,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    notes[note_id] = note
+    note = Note(
+        id=note_id,
+        title=title,
+        content=content,
+        folder_id=folder_id,
+        tags=extracted_tags,
+        is_idea=is_idea,
+        priority=priority,
+        pinned=False,
+        archived=False,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    notes[note_id] = note.model_dump()
     _save()
     return note
 
 
 @mcp.tool
-def get_note(note_id: int) -> Optional[dict]:
+def get_note(note_id: int) -> Optional[Note]:
     """Get a note by ID.
 
     Args:
@@ -189,7 +214,9 @@ def get_note(note_id: int) -> Optional[dict]:
     Returns:
         Note details or None
     """
-    return notes.get(note_id)
+    if note_id in notes:
+        return Note(**notes[note_id])
+    return None
 
 
 @mcp.tool
@@ -203,7 +230,7 @@ def update_note(
     priority: Optional[str] = None,
     pinned: Optional[bool] = None,
     archived: Optional[bool] = None
-) -> Optional[dict]:
+) -> Optional[Note]:
     """Update a note.
 
     Args:
@@ -244,7 +271,7 @@ def update_note(
 
     note["updated_at"] = datetime.now().isoformat()
     _save()
-    return note
+    return Note(**note)
 
 
 @mcp.tool
@@ -265,7 +292,7 @@ def delete_note(note_id: int) -> bool:
 
 
 @mcp.tool
-def quick_idea(content: str, priority: Optional[str] = None) -> dict:
+def quick_idea(content: str, priority: Optional[str] = None) -> Note:
     """Quickly capture an idea.
 
     Args:
@@ -284,7 +311,7 @@ def quick_idea(content: str, priority: Optional[str] = None) -> dict:
 
 
 @mcp.tool
-def quick_note(content: str, folder_id: Optional[int] = None) -> dict:
+def quick_note(content: str, folder_id: Optional[int] = None) -> Note:
     """Quickly create a note.
 
     Args:
@@ -309,7 +336,7 @@ def search_notes(
     tags: Optional[list[str]] = None,
     is_idea: Optional[bool] = None,
     include_archived: bool = False
-) -> list[dict]:
+) -> list[Note]:
     """Search notes by content, title, or tags.
 
     Args:
@@ -347,13 +374,13 @@ def search_notes(
         # Search in title and content
         if (query_lower in note["title"].lower() or
             query_lower in note["content"].lower()):
-            result.append(note)
+            result.append(Note(**note))
 
     return result
 
 
 @mcp.tool
-def get_notes_by_folder(folder_id: int, include_archived: bool = False) -> list[dict]:
+def get_notes_by_folder(folder_id: int, include_archived: bool = False) -> list[Note]:
     """Get all notes in a folder.
 
     Args:
@@ -364,13 +391,13 @@ def get_notes_by_folder(folder_id: int, include_archived: bool = False) -> list[
         List of notes in the folder
     """
     return [
-        n for n in notes.values()
+        Note(**n) for n in notes.values()
         if n.get("folder_id") == folder_id and (include_archived or not n.get("archived"))
     ]
 
 
 @mcp.tool
-def get_notes_by_tag(tag: str, include_archived: bool = False) -> list[dict]:
+def get_notes_by_tag(tag: str, include_archived: bool = False) -> list[Note]:
     """Get all notes with a specific tag.
 
     Args:
@@ -382,7 +409,7 @@ def get_notes_by_tag(tag: str, include_archived: bool = False) -> list[dict]:
     """
     tag_lower = tag.lower()
     return [
-        n for n in notes.values()
+        Note(**n) for n in notes.values()
         if tag_lower in [t.lower() for t in n.get("tags", [])]
         and (include_archived or not n.get("archived"))
     ]
@@ -408,17 +435,17 @@ def get_all_tags() -> list[dict]:
 
 
 @mcp.tool
-def get_pinned_notes() -> list[dict]:
+def get_pinned_notes() -> list[Note]:
     """Get all pinned notes.
 
     Returns:
         List of pinned notes
     """
-    return [n for n in notes.values() if n.get("pinned") and not n.get("archived")]
+    return [Note(**n) for n in notes.values() if n.get("pinned") and not n.get("archived")]
 
 
 @mcp.tool
-def get_ideas(priority: Optional[str] = None) -> list[dict]:
+def get_ideas(priority: Optional[str] = None) -> list[Note]:
     """Get all ideas, optionally filtered by priority.
 
     Args:
@@ -427,10 +454,10 @@ def get_ideas(priority: Optional[str] = None) -> list[dict]:
     Returns:
         List of ideas
     """
-    result = [n for n in notes.values() if n.get("is_idea") and not n.get("archived")]
+    result = [Note(**n) for n in notes.values() if n.get("is_idea") and not n.get("archived")]
 
     if priority:
-        result = [n for n in result if n.get("priority") == priority]
+        result = [n for n in result if n.priority == priority]
 
     return result
 
@@ -440,7 +467,7 @@ def list_notes(
     folder_id: Optional[int] = None,
     include_archived: bool = False,
     limit: int = 50
-) -> list[dict]:
+) -> list[Note]:
     """List notes with optional filters.
 
     Args:
@@ -460,7 +487,7 @@ def list_notes(
 
     # Sort: pinned first, then by updated_at
     result.sort(key=lambda x: (not x.get("pinned", False), x["updated_at"]), reverse=True)
-    return result[:limit]
+    return [Note(**n) for n in result[:limit]]
 
 
 # Resources

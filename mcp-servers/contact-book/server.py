@@ -7,12 +7,25 @@ from datetime import datetime
 from typing import Optional
 from pathlib import Path
 import json
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Contact Book",
     instructions="A contact management server for storing, searching, and organizing contacts."
 )
+
+
+class Contact(BaseModel):
+    """A contact in the contact book."""
+    id: int
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    company: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: str
+    updated_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -60,7 +73,7 @@ def add_contact(
     phone: Optional[str] = None,
     company: Optional[str] = None,
     notes: Optional[str] = None
-) -> dict:
+) -> Contact:
     """Add a new contact to the contact book.
 
     Args:
@@ -74,23 +87,23 @@ def add_contact(
         The created contact with its assigned ID
     """
     contact_id = _get_next_id()
-    contact = {
-        "id": contact_id,
-        "name": name,
-        "email": email,
-        "phone": phone,
-        "company": company,
-        "notes": notes,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    contacts[contact_id] = contact
+    contact = Contact(
+        id=contact_id,
+        name=name,
+        email=email,
+        phone=phone,
+        company=company,
+        notes=notes,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    contacts[contact_id] = contact.model_dump()
     _save()
     return contact
 
 
 @mcp.tool
-def get_contact(contact_id: int) -> Optional[dict]:
+def get_contact(contact_id: int) -> Optional[Contact]:
     """Retrieve a contact by ID.
 
     Args:
@@ -99,11 +112,14 @@ def get_contact(contact_id: int) -> Optional[dict]:
     Returns:
         The contact details or None if not found
     """
-    return contacts.get(contact_id)
+    data = contacts.get(contact_id)
+    if data is None:
+        return None
+    return Contact(**data)
 
 
 @mcp.tool
-def search_contacts(query: str) -> list[dict]:
+def search_contacts(query: str) -> list[Contact]:
     """Search contacts by name, email, phone, or company.
 
     Args:
@@ -114,13 +130,13 @@ def search_contacts(query: str) -> list[dict]:
     """
     query_lower = query.lower()
     results = []
-    for contact in contacts.values():
+    for contact_data in contacts.values():
         if any(
             query_lower in str(v).lower()
-            for k, v in contact.items()
+            for k, v in contact_data.items()
             if v is not None and k != "id"
         ):
-            results.append(contact)
+            results.append(Contact(**contact_data))
     return results
 
 
@@ -132,7 +148,7 @@ def update_contact(
     phone: Optional[str] = None,
     company: Optional[str] = None,
     notes: Optional[str] = None
-) -> Optional[dict]:
+) -> Optional[Contact]:
     """Update an existing contact.
 
     Args:
@@ -163,7 +179,7 @@ def update_contact(
     contact["updated_at"] = datetime.now().isoformat()
     _save()
 
-    return contact
+    return Contact(**contact)
 
 
 @mcp.tool
@@ -184,7 +200,7 @@ def delete_contact(contact_id: int) -> bool:
 
 
 @mcp.tool
-def list_contacts(limit: int = 50, offset: int = 0) -> list[dict]:
+def list_contacts(limit: int = 50, offset: int = 0) -> list[Contact]:
     """List all contacts with pagination.
 
     Args:
@@ -195,7 +211,7 @@ def list_contacts(limit: int = 50, offset: int = 0) -> list[dict]:
         List of contacts
     """
     all_contacts = sorted(contacts.values(), key=lambda c: c.get("name", ""))
-    return all_contacts[offset:offset + limit]
+    return [Contact(**c) for c in all_contacts[offset:offset + limit]]
 
 
 @mcp.tool

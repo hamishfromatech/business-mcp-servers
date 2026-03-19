@@ -8,12 +8,71 @@ from typing import Optional
 from pathlib import Path
 import json
 from enum import Enum
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Meeting Notes",
     instructions="A meeting notes server for organizing meetings, agendas, notes, and action items."
 )
+
+
+class MeetingStatus(str, Enum):
+    SCHEDULED = "scheduled"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class ActionPriority(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class ActionStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class Attendee(BaseModel):
+    """A meeting attendee."""
+    id: int
+    name: str
+    email: Optional[str] = None
+    role: Optional[str] = None
+    created_at: str
+
+
+class Meeting(BaseModel):
+    """A meeting."""
+    id: int
+    title: str
+    scheduled_at: str
+    duration_minutes: int = 60
+    location: Optional[str] = None
+    description: Optional[str] = None
+    status: str
+    attendee_ids: list[int] = []
+    agenda: list = []
+    notes: str = ""
+    created_at: str
+    updated_at: str
+
+
+class ActionItem(BaseModel):
+    """An action item from a meeting."""
+    id: int
+    meeting_id: int
+    description: str
+    assignee_id: Optional[int] = None
+    due_date: Optional[str] = None
+    priority: str
+    status: str
+    created_at: str
+    updated_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -49,26 +108,6 @@ _next_action_id = _data.get("next_action_id", 1)
 _next_attendee_id = _data.get("next_attendee_id", 1)
 
 
-class MeetingStatus(str, Enum):
-    SCHEDULED = "scheduled"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-
-
-class ActionPriority(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-
-
-class ActionStatus(str, Enum):
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-
-
 def _save() -> None:
     """Save current state to disk."""
     _save_data({
@@ -101,7 +140,7 @@ def _get_next_attendee_id() -> int:
 
 # Attendee Management
 @mcp.tool
-def create_attendee(name: str, email: Optional[str] = None, role: Optional[str] = None) -> dict:
+def create_attendee(name: str, email: Optional[str] = None, role: Optional[str] = None) -> Attendee:
     """Create an attendee profile.
 
     Args:
@@ -113,26 +152,26 @@ def create_attendee(name: str, email: Optional[str] = None, role: Optional[str] 
         The created attendee
     """
     attendee_id = _get_next_attendee_id()
-    attendee = {
-        "id": attendee_id,
-        "name": name,
-        "email": email,
-        "role": role,
-        "created_at": datetime.now().isoformat()
-    }
-    attendees[attendee_id] = attendee
+    attendee = Attendee(
+        id=attendee_id,
+        name=name,
+        email=email,
+        role=role,
+        created_at=datetime.now().isoformat()
+    )
+    attendees[attendee_id] = attendee.model_dump()
     _save()
     return attendee
 
 
 @mcp.tool
-def list_attendees() -> list[dict]:
+def list_attendees() -> list[Attendee]:
     """List all attendees.
 
     Returns:
         List of attendees
     """
-    return list(attendees.values())
+    return [Attendee(**a) for a in attendees.values()]
 
 
 # Meeting Management
@@ -144,7 +183,7 @@ def create_meeting(
     location: Optional[str] = None,
     description: Optional[str] = None,
     attendee_ids: Optional[list[int]] = None
-) -> dict:
+) -> Meeting:
     """Create a new meeting.
 
     Args:
@@ -159,27 +198,27 @@ def create_meeting(
         The created meeting
     """
     meeting_id = _get_next_meeting_id()
-    meeting = {
-        "id": meeting_id,
-        "title": title,
-        "scheduled_at": scheduled_at,
-        "duration_minutes": duration_minutes,
-        "location": location,
-        "description": description,
-        "status": MeetingStatus.SCHEDULED.value,
-        "attendee_ids": attendee_ids or [],
-        "agenda": [],
-        "notes": "",
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    meetings[meeting_id] = meeting
+    meeting = Meeting(
+        id=meeting_id,
+        title=title,
+        scheduled_at=scheduled_at,
+        duration_minutes=duration_minutes,
+        location=location,
+        description=description,
+        status=MeetingStatus.SCHEDULED.value,
+        attendee_ids=attendee_ids or [],
+        agenda=[],
+        notes="",
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    meetings[meeting_id] = meeting.model_dump()
     _save()
     return meeting
 
 
 @mcp.tool
-def get_meeting(meeting_id: int) -> Optional[dict]:
+def get_meeting(meeting_id: int) -> Optional[Meeting]:
     """Get a meeting by ID.
 
     Args:
@@ -188,7 +227,9 @@ def get_meeting(meeting_id: int) -> Optional[dict]:
     Returns:
         Meeting details or None
     """
-    return meetings.get(meeting_id)
+    if meeting_id in meetings:
+        return Meeting(**meetings[meeting_id])
+    return None
 
 
 @mcp.tool
@@ -200,7 +241,7 @@ def update_meeting(
     location: Optional[str] = None,
     description: Optional[str] = None,
     status: Optional[str] = None
-) -> Optional[dict]:
+) -> Optional[Meeting]:
     """Update a meeting.
 
     Args:
@@ -237,7 +278,7 @@ def update_meeting(
 
     meeting["updated_at"] = datetime.now().isoformat()
     _save()
-    return meeting
+    return Meeting(**meeting)
 
 
 @mcp.tool
@@ -262,7 +303,7 @@ def delete_meeting(meeting_id: int) -> bool:
 
 
 @mcp.tool
-def add_attendee_to_meeting(meeting_id: int, attendee_id: int) -> Optional[dict]:
+def add_attendee_to_meeting(meeting_id: int, attendee_id: int) -> Optional[Meeting]:
     """Add an attendee to a meeting.
 
     Args:
@@ -283,11 +324,11 @@ def add_attendee_to_meeting(meeting_id: int, attendee_id: int) -> Optional[dict]
         meeting["updated_at"] = datetime.now().isoformat()
         _save()
 
-    return meeting
+    return Meeting(**meeting)
 
 
 @mcp.tool
-def remove_attendee_from_meeting(meeting_id: int, attendee_id: int) -> Optional[dict]:
+def remove_attendee_from_meeting(meeting_id: int, attendee_id: int) -> Optional[Meeting]:
     """Remove an attendee from a meeting.
 
     Args:
@@ -306,7 +347,7 @@ def remove_attendee_from_meeting(meeting_id: int, attendee_id: int) -> Optional[
         meeting["updated_at"] = datetime.now().isoformat()
         _save()
 
-    return meeting
+    return Meeting(**meeting)
 
 
 # Agenda Management
@@ -406,7 +447,7 @@ def create_action_item(
     assignee_id: Optional[int] = None,
     due_date: Optional[str] = None,
     priority: str = "medium"
-) -> dict:
+) -> ActionItem:
     """Create an action item from a meeting.
 
     Args:
@@ -427,24 +468,24 @@ def create_action_item(
         raise ValueError(f"Invalid priority. Must be one of: {valid_priorities}")
 
     action_id = _get_next_action_id()
-    action = {
-        "id": action_id,
-        "meeting_id": meeting_id,
-        "description": description,
-        "assignee_id": assignee_id,
-        "due_date": due_date,
-        "priority": priority,
-        "status": ActionStatus.PENDING.value,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    action_items[action_id] = action
+    action = ActionItem(
+        id=action_id,
+        meeting_id=meeting_id,
+        description=description,
+        assignee_id=assignee_id,
+        due_date=due_date,
+        priority=priority,
+        status=ActionStatus.PENDING.value,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    action_items[action_id] = action.model_dump()
     _save()
     return action
 
 
 @mcp.tool
-def get_action_item(action_id: int) -> Optional[dict]:
+def get_action_item(action_id: int) -> Optional[ActionItem]:
     """Get an action item by ID.
 
     Args:
@@ -453,7 +494,9 @@ def get_action_item(action_id: int) -> Optional[dict]:
     Returns:
         Action item details or None
     """
-    return action_items.get(action_id)
+    if action_id in action_items:
+        return ActionItem(**action_items[action_id])
+    return None
 
 
 @mcp.tool
@@ -464,7 +507,7 @@ def update_action_item(
     due_date: Optional[str] = None,
     priority: Optional[str] = None,
     status: Optional[str] = None
-) -> Optional[dict]:
+) -> Optional[ActionItem]:
     """Update an action item.
 
     Args:
@@ -501,11 +544,11 @@ def update_action_item(
 
     action["updated_at"] = datetime.now().isoformat()
     _save()
-    return action
+    return ActionItem(**action)
 
 
 @mcp.tool
-def get_meeting_actions(meeting_id: int) -> list[dict]:
+def get_meeting_actions(meeting_id: int) -> list[ActionItem]:
     """Get all action items for a meeting.
 
     Args:
@@ -514,21 +557,21 @@ def get_meeting_actions(meeting_id: int) -> list[dict]:
     Returns:
         List of action items
     """
-    return [a for a in action_items.values() if a["meeting_id"] == meeting_id]
+    return [ActionItem(**a) for a in action_items.values() if a["meeting_id"] == meeting_id]
 
 
 @mcp.tool
-def get_pending_actions() -> list[dict]:
+def get_pending_actions() -> list[ActionItem]:
     """Get all pending action items.
 
     Returns:
         List of pending action items
     """
-    return [a for a in action_items.values() if a["status"] == ActionStatus.PENDING.value]
+    return [ActionItem(**a) for a in action_items.values() if a["status"] == ActionStatus.PENDING.value]
 
 
 @mcp.tool
-def get_overdue_actions() -> list[dict]:
+def get_overdue_actions() -> list[ActionItem]:
     """Get all overdue action items.
 
     Returns:
@@ -536,7 +579,7 @@ def get_overdue_actions() -> list[dict]:
     """
     today = datetime.now().strftime("%Y-%m-%d")
     return [
-        a for a in action_items.values()
+        ActionItem(**a) for a in action_items.values()
         if a["status"] not in [ActionStatus.COMPLETED.value, ActionStatus.CANCELLED.value]
         and a.get("due_date") and a["due_date"] < today
     ]
@@ -547,7 +590,7 @@ def list_meetings(
     status: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None
-) -> list[dict]:
+) -> list[Meeting]:
     """List meetings with optional filters.
 
     Args:
@@ -567,7 +610,7 @@ def list_meetings(
     if to_date:
         result = [m for m in result if m["scheduled_at"] <= to_date]
 
-    return sorted(result, key=lambda x: x["scheduled_at"])
+    return [Meeting(**m) for m in sorted(result, key=lambda x: x["scheduled_at"])]
 
 
 # Resources

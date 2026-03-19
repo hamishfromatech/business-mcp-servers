@@ -8,12 +8,54 @@ from typing import Optional
 from pathlib import Path
 import json
 from enum import Enum
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Expense Tracker",
     instructions="An expense tracking server for managing expenses, budgets, and financial insights."
 )
+
+
+class ExpenseCategory(str, Enum):
+    FOOD = "food"
+    TRANSPORT = "transport"
+    UTILITIES = "utilities"
+    ENTERTAINMENT = "entertainment"
+    SHOPPING = "shopping"
+    HEALTH = "health"
+    EDUCATION = "education"
+    OTHER = "other"
+
+
+class Expense(BaseModel):
+    """An expense entry."""
+    id: int
+    amount: float
+    category: str
+    description: str
+    date: str
+    tags: list[str] = []
+    created_at: str
+
+
+class Budget(BaseModel):
+    """A budget entry."""
+    id: int
+    name: str
+    amount: float
+    category: Optional[str] = None
+    period: str
+    start_date: str
+    created_at: str
+
+
+class Category(BaseModel):
+    """An expense category."""
+    id: int
+    name: str
+    icon: Optional[str] = None
+    created_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -49,17 +91,6 @@ _next_budget_id = _data.get("next_budget_id", 1)
 _next_category_id = _data.get("next_category_id", 1)
 
 
-class ExpenseCategory(str, Enum):
-    FOOD = "food"
-    TRANSPORT = "transport"
-    UTILITIES = "utilities"
-    ENTERTAINMENT = "entertainment"
-    SHOPPING = "shopping"
-    HEALTH = "health"
-    EDUCATION = "education"
-    OTHER = "other"
-
-
 def _save() -> None:
     """Save current state to disk."""
     _save_data({
@@ -92,7 +123,7 @@ def _get_next_category_id() -> int:
 
 # Category Management
 @mcp.tool
-def create_category(name: str, icon: Optional[str] = None) -> dict:
+def create_category(name: str, icon: Optional[str] = None) -> Category:
     """Create a custom expense category.
 
     Args:
@@ -103,13 +134,13 @@ def create_category(name: str, icon: Optional[str] = None) -> dict:
         The created category
     """
     category_id = _get_next_category_id()
-    category = {
-        "id": category_id,
-        "name": name,
-        "icon": icon,
-        "created_at": datetime.now().isoformat()
-    }
-    categories[category_id] = category
+    category = Category(
+        id=category_id,
+        name=name,
+        icon=icon,
+        created_at=datetime.now().isoformat()
+    )
+    categories[category_id] = category.model_dump()
     _save()
     return category
 
@@ -122,7 +153,7 @@ def list_categories() -> list[dict]:
         List of categories
     """
     default_cats = [{"name": c.value, "icon": None} for c in ExpenseCategory]
-    custom_cats = list(categories.values())
+    custom_cats = [Category(**c).model_dump() for c in categories.values()]
     return default_cats + custom_cats
 
 
@@ -134,7 +165,7 @@ def add_expense(
     description: str,
     date: Optional[str] = None,
     tags: Optional[list[str]] = None
-) -> dict:
+) -> Expense:
     """Add a new expense.
 
     Args:
@@ -148,22 +179,22 @@ def add_expense(
         The created expense
     """
     expense_id = _get_next_expense_id()
-    expense = {
-        "id": expense_id,
-        "amount": amount,
-        "category": category.lower(),
-        "description": description,
-        "date": date or datetime.now().strftime("%Y-%m-%d"),
-        "tags": tags or [],
-        "created_at": datetime.now().isoformat()
-    }
-    expenses[expense_id] = expense
+    expense = Expense(
+        id=expense_id,
+        amount=amount,
+        category=category.lower(),
+        description=description,
+        date=date or datetime.now().strftime("%Y-%m-%d"),
+        tags=tags or [],
+        created_at=datetime.now().isoformat()
+    )
+    expenses[expense_id] = expense.model_dump()
     _save()
     return expense
 
 
 @mcp.tool
-def get_expense(expense_id: int) -> Optional[dict]:
+def get_expense(expense_id: int) -> Optional[Expense]:
     """Get an expense by ID.
 
     Args:
@@ -172,7 +203,10 @@ def get_expense(expense_id: int) -> Optional[dict]:
     Returns:
         Expense details or None
     """
-    return expenses.get(expense_id)
+    data = expenses.get(expense_id)
+    if data is None:
+        return None
+    return Expense(**data)
 
 
 @mcp.tool
@@ -183,7 +217,7 @@ def update_expense(
     description: Optional[str] = None,
     date: Optional[str] = None,
     tags: Optional[list[str]] = None
-) -> Optional[dict]:
+) -> Optional[Expense]:
     """Update an existing expense.
 
     Args:
@@ -213,7 +247,7 @@ def update_expense(
         expense["tags"] = tags
     _save()
 
-    return expense
+    return Expense(**expense)
 
 
 @mcp.tool
@@ -234,7 +268,7 @@ def delete_expense(expense_id: int) -> bool:
 
 
 @mcp.tool
-def get_expenses_by_date(start_date: str, end_date: str) -> list[dict]:
+def get_expenses_by_date(start_date: str, end_date: str) -> list[Expense]:
     """Get expenses within a date range.
 
     Args:
@@ -245,13 +279,13 @@ def get_expenses_by_date(start_date: str, end_date: str) -> list[dict]:
         List of expenses in the date range
     """
     return [
-        e for e in expenses.values()
+        Expense(**e) for e in expenses.values()
         if start_date <= e["date"] <= end_date
     ]
 
 
 @mcp.tool
-def get_expenses_by_category(category: str) -> list[dict]:
+def get_expenses_by_category(category: str) -> list[Expense]:
     """Get all expenses in a category.
 
     Args:
@@ -262,7 +296,7 @@ def get_expenses_by_category(category: str) -> list[dict]:
     """
     cat_lower = category.lower()
     return [
-        e for e in expenses.values()
+        Expense(**e) for e in expenses.values()
         if e["category"] == cat_lower
     ]
 
@@ -307,7 +341,7 @@ def create_budget(
     category: Optional[str] = None,
     period: str = "monthly",
     start_date: Optional[str] = None
-) -> dict:
+) -> Budget:
     """Create a budget.
 
     Args:
@@ -321,16 +355,16 @@ def create_budget(
         The created budget
     """
     budget_id = _get_next_budget_id()
-    budget = {
-        "id": budget_id,
-        "name": name,
-        "amount": amount,
-        "category": category.lower() if category else None,
-        "period": period,
-        "start_date": start_date or datetime.now().strftime("%Y-%m-%d"),
-        "created_at": datetime.now().isoformat()
-    }
-    budgets[budget_id] = budget
+    budget = Budget(
+        id=budget_id,
+        name=name,
+        amount=amount,
+        category=category.lower() if category else None,
+        period=period,
+        start_date=start_date or datetime.now().strftime("%Y-%m-%d"),
+        created_at=datetime.now().isoformat()
+    )
+    budgets[budget_id] = budget.model_dump()
     _save()
     return budget
 
@@ -372,7 +406,7 @@ def get_budget_status(budget_id: int) -> Optional[dict]:
     percent_used = (spent / budget["amount"] * 100) if budget["amount"] > 0 else 0
 
     return {
-        "budget": budget,
+        "budget": Budget(**budget).model_dump(),
         "spent": spent,
         "remaining": remaining,
         "percent_used": round(percent_used, 1),
@@ -382,13 +416,13 @@ def get_budget_status(budget_id: int) -> Optional[dict]:
 
 
 @mcp.tool
-def list_budgets() -> list[dict]:
+def list_budgets() -> list[Budget]:
     """List all budgets.
 
     Returns:
         List of all budgets
     """
-    return list(budgets.values())
+    return [Budget(**b) for b in budgets.values()]
 
 
 # Resources

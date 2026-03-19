@@ -8,16 +8,13 @@ from typing import Optional
 from pathlib import Path
 import json
 from enum import Enum
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Code Reviewer",
     instructions="A code review management server for tracking review sessions, issues, and maintaining code quality standards."
 )
-
-# Data persistence setup
-DATA_DIR = Path(__file__).parent / "data"
-DATA_FILE = DATA_DIR / "code_reviewer.json"
 
 
 class Severity(str, Enum):
@@ -51,6 +48,48 @@ class IssueCategory(str, Enum):
     DOCUMENTATION = "documentation"
     TESTING = "testing"
     ARCHITECTURE = "architecture"
+
+
+class Review(BaseModel):
+    """A code review session."""
+    id: int
+    title: str
+    description: Optional[str] = None
+    files: list[str] = []
+    status: str
+    reviewer: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class Issue(BaseModel):
+    """A code review issue."""
+    id: int
+    review_id: Optional[int] = None
+    file_path: Optional[str] = None
+    line_number: Optional[int] = None
+    category: str
+    severity: str
+    description: str
+    suggestion: Optional[str] = None
+    status: str
+    created_at: str
+    updated_at: str
+
+
+class Standard(BaseModel):
+    """A coding standard or best practice."""
+    id: int
+    name: str
+    category: str
+    description: str
+    examples: list[str] = []
+    created_at: str
+
+
+# Data persistence setup
+DATA_DIR = Path(__file__).parent / "data"
+DATA_FILE = DATA_DIR / "reviews.json"
 
 
 def _load_data() -> dict:

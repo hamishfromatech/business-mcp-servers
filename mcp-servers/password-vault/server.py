@@ -13,12 +13,34 @@ import json
 import base64
 import hashlib
 import secrets
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Password Vault",
     instructions="A secure password vault server for storing and managing credentials with encryption."
 )
+
+
+class Category(BaseModel):
+    """A category for organizing vault entries."""
+    id: int
+    name: str
+    icon: Optional[str] = None
+    created_at: str
+
+
+class VaultEntry(BaseModel):
+    """A vault entry (password masked)."""
+    id: int
+    site: str
+    username: str
+    url: Optional[str] = None
+    category_id: Optional[int] = None
+    notes: Optional[str] = None
+    has_password: bool = True
+    created_at: str
+    updated_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -143,7 +165,7 @@ def verify_master_password(password: str) -> bool:
 
 # Category Management
 @mcp.tool
-def create_category(name: str, icon: Optional[str] = None) -> dict:
+def create_category(name: str, icon: Optional[str] = None) -> Category:
     """Create a category for organizing vault entries.
 
     Args:
@@ -154,25 +176,25 @@ def create_category(name: str, icon: Optional[str] = None) -> dict:
         The created category
     """
     category_id = _get_next_category_id()
-    category = {
-        "id": category_id,
-        "name": name,
-        "icon": icon,
-        "created_at": datetime.now().isoformat()
-    }
-    categories[category_id] = category
+    category = Category(
+        id=category_id,
+        name=name,
+        icon=icon,
+        created_at=datetime.now().isoformat()
+    )
+    categories[category_id] = category.model_dump()
     _save()
     return category
 
 
 @mcp.tool
-def list_categories() -> list[dict]:
+def list_categories() -> list[Category]:
     """List all categories.
 
     Returns:
         List of categories
     """
-    return list(categories.values())
+    return [Category(**c) for c in categories.values()]
 
 
 # Vault Entry Management
@@ -185,7 +207,7 @@ def create_entry(
     url: Optional[str] = None,
     category_id: Optional[int] = None,
     notes: Optional[str] = None
-) -> dict:
+) -> VaultEntry:
     """Create a new vault entry.
 
     Args:
@@ -220,11 +242,17 @@ def create_entry(
     vault_entries[entry_id] = entry
     _save()
 
-    # Return without showing encrypted password
-    result = entry.copy()
-    del result["password_encrypted"]
-    result["has_password"] = True
-    return result
+    return VaultEntry(
+        id=entry_id,
+        site=site,
+        username=username,
+        url=url,
+        category_id=category_id,
+        notes=notes,
+        has_password=True,
+        created_at=entry["created_at"],
+        updated_at=entry["updated_at"]
+    )
 
 
 @mcp.tool
@@ -252,7 +280,7 @@ def get_entry(entry_id: int, master_password: str) -> Optional[dict]:
 
 
 @mcp.tool
-def list_entries(category_id: Optional[int] = None) -> list[dict]:
+def list_entries(category_id: Optional[int] = None) -> list[VaultEntry]:
     """List all vault entries (passwords masked).
 
     Args:
@@ -265,10 +293,17 @@ def list_entries(category_id: Optional[int] = None) -> list[dict]:
     for entry in vault_entries.values():
         if category_id is not None and entry.get("category_id") != category_id:
             continue
-        entry_safe = entry.copy()
-        del entry_safe["password_encrypted"]
-        entry_safe["has_password"] = True
-        result.append(entry_safe)
+        result.append(VaultEntry(
+            id=entry["id"],
+            site=entry["site"],
+            username=entry["username"],
+            url=entry.get("url"),
+            category_id=entry.get("category_id"),
+            notes=entry.get("notes"),
+            has_password=True,
+            created_at=entry["created_at"],
+            updated_at=entry["updated_at"]
+        ))
 
     return result
 
@@ -283,7 +318,7 @@ def update_entry(
     url: Optional[str] = None,
     category_id: Optional[int] = None,
     notes: Optional[str] = None
-) -> Optional[dict]:
+) -> Optional[VaultEntry]:
     """Update a vault entry.
 
     Args:
@@ -322,10 +357,17 @@ def update_entry(
     entry["updated_at"] = datetime.now().isoformat()
     _save()
 
-    result = entry.copy()
-    del result["password_encrypted"]
-    result["has_password"] = True
-    return result
+    return VaultEntry(
+        id=entry["id"],
+        site=entry["site"],
+        username=entry["username"],
+        url=entry.get("url"),
+        category_id=entry.get("category_id"),
+        notes=entry.get("notes"),
+        has_password=True,
+        created_at=entry["created_at"],
+        updated_at=entry["updated_at"]
+    )
 
 
 @mcp.tool
@@ -350,7 +392,7 @@ def delete_entry(entry_id: int, master_password: str) -> bool:
 
 
 @mcp.tool
-def search_entries(query: str) -> list[dict]:
+def search_entries(query: str) -> list[VaultEntry]:
     """Search vault entries by site, username, or URL.
 
     Args:
@@ -366,10 +408,17 @@ def search_entries(query: str) -> list[dict]:
         if (query_lower in entry["site"].lower() or
             query_lower in entry["username"].lower() or
             (entry.get("url") and query_lower in entry["url"].lower())):
-            entry_safe = entry.copy()
-            del entry_safe["password_encrypted"]
-            entry_safe["has_password"] = True
-            result.append(entry_safe)
+            result.append(VaultEntry(
+                id=entry["id"],
+                site=entry["site"],
+                username=entry["username"],
+                url=entry.get("url"),
+                category_id=entry.get("category_id"),
+                notes=entry.get("notes"),
+                has_password=True,
+                created_at=entry["created_at"],
+                updated_at=entry["updated_at"]
+            ))
 
     return result
 

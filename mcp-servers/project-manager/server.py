@@ -8,12 +8,86 @@ from typing import Optional
 from pathlib import Path
 import json
 from enum import Enum
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Project Manager",
     instructions="A project management server for organizing projects, tasks, milestones, and team members."
 )
+
+
+class ProjectStatus(str, Enum):
+    PLANNING = "planning"
+    ACTIVE = "active"
+    ON_HOLD = "on_hold"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class TaskStatus(str, Enum):
+    TODO = "todo"
+    IN_PROGRESS = "in_progress"
+    REVIEW = "review"
+    DONE = "done"
+    CANCELLED = "cancelled"
+
+
+class TaskPriority(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
+class TeamMember(BaseModel):
+    """A team member."""
+    id: int
+    name: str
+    email: str
+    role: Optional[str] = None
+    created_at: str
+
+
+class Project(BaseModel):
+    """A project."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    owner_id: Optional[int] = None
+    status: str
+    member_ids: list[int] = []
+    created_at: str
+    updated_at: str
+
+
+class Task(BaseModel):
+    """A task in a project."""
+    id: int
+    project_id: int
+    title: str
+    description: Optional[str] = None
+    assignee_id: Optional[int] = None
+    priority: str
+    status: str
+    due_date: Optional[str] = None
+    parent_task_id: Optional[int] = None
+    created_at: str
+    updated_at: str
+
+
+class Milestone(BaseModel):
+    """A project milestone."""
+    id: int
+    project_id: int
+    title: str
+    description: Optional[str] = None
+    due_date: Optional[str] = None
+    completed: bool = False
+    completed_at: Optional[str] = None
+    created_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -49,29 +123,6 @@ _next_project_id = _data.get("next_project_id", 1)
 _next_task_id = _data.get("next_task_id", 1)
 _next_milestone_id = _data.get("next_milestone_id", 1)
 _next_member_id = _data.get("next_member_id", 1)
-
-
-class ProjectStatus(str, Enum):
-    PLANNING = "planning"
-    ACTIVE = "active"
-    ON_HOLD = "on_hold"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-
-
-class TaskStatus(str, Enum):
-    TODO = "todo"
-    IN_PROGRESS = "in_progress"
-    REVIEW = "review"
-    DONE = "done"
-    CANCELLED = "cancelled"
-
-
-class TaskPriority(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    URGENT = "urgent"
 
 
 def _save() -> None:
@@ -114,7 +165,7 @@ def _get_next_member_id() -> int:
 
 # Team Member Management
 @mcp.tool
-def create_team_member(name: str, email: str, role: Optional[str] = None) -> dict:
+def create_team_member(name: str, email: str, role: Optional[str] = None) -> TeamMember:
     """Create a team member.
 
     Args:
@@ -126,30 +177,30 @@ def create_team_member(name: str, email: str, role: Optional[str] = None) -> dic
         The created team member
     """
     member_id = _get_next_member_id()
-    member = {
-        "id": member_id,
-        "name": name,
-        "email": email,
-        "role": role,
-        "created_at": datetime.now().isoformat()
-    }
-    team_members[member_id] = member
+    member = TeamMember(
+        id=member_id,
+        name=name,
+        email=email,
+        role=role,
+        created_at=datetime.now().isoformat()
+    )
+    team_members[member_id] = member.model_dump()
     _save()
     return member
 
 
 @mcp.tool
-def list_team_members() -> list[dict]:
+def list_team_members() -> list[TeamMember]:
     """List all team members.
 
     Returns:
         List of team members
     """
-    return list(team_members.values())
+    return [TeamMember(**m) for m in team_members.values()]
 
 
 @mcp.tool
-def get_member(member_id: int) -> Optional[dict]:
+def get_member(member_id: int) -> Optional[TeamMember]:
     """Get a team member by ID.
 
     Args:
@@ -158,7 +209,9 @@ def get_member(member_id: int) -> Optional[dict]:
     Returns:
         Team member details or None
     """
-    return team_members.get(member_id)
+    if member_id in team_members:
+        return TeamMember(**team_members[member_id])
+    return None
 
 
 # Project Management
@@ -169,7 +222,7 @@ def create_project(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     owner_id: Optional[int] = None
-) -> dict:
+) -> Project:
     """Create a new project.
 
     Args:
@@ -183,25 +236,25 @@ def create_project(
         The created project
     """
     project_id = _get_next_project_id()
-    project = {
-        "id": project_id,
-        "name": name,
-        "description": description,
-        "start_date": start_date,
-        "end_date": end_date,
-        "owner_id": owner_id,
-        "status": ProjectStatus.PLANNING.value,
-        "member_ids": [],
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    projects[project_id] = project
+    project = Project(
+        id=project_id,
+        name=name,
+        description=description,
+        start_date=start_date,
+        end_date=end_date,
+        owner_id=owner_id,
+        status=ProjectStatus.PLANNING.value,
+        member_ids=[],
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    projects[project_id] = project.model_dump()
     _save()
     return project
 
 
 @mcp.tool
-def get_project(project_id: int) -> Optional[dict]:
+def get_project(project_id: int) -> Optional[Project]:
     """Get a project by ID.
 
     Args:
@@ -210,7 +263,9 @@ def get_project(project_id: int) -> Optional[dict]:
     Returns:
         Project details or None
     """
-    return projects.get(project_id)
+    if project_id in projects:
+        return Project(**projects[project_id])
+    return None
 
 
 @mcp.tool
@@ -221,7 +276,7 @@ def update_project(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     status: Optional[str] = None
-) -> Optional[dict]:
+) -> Optional[Project]:
     """Update a project.
 
     Args:
@@ -255,7 +310,7 @@ def update_project(
 
     project["updated_at"] = datetime.now().isoformat()
     _save()
-    return project
+    return Project(**project)
 
 
 @mcp.tool
@@ -335,7 +390,7 @@ def create_task(
     priority: str = "medium",
     due_date: Optional[str] = None,
     parent_task_id: Optional[int] = None
-) -> dict:
+) -> Task:
     """Create a task in a project.
 
     Args:
@@ -358,26 +413,26 @@ def create_task(
         raise ValueError(f"Invalid priority. Must be one of: {valid_priorities}")
 
     task_id = _get_next_task_id()
-    task = {
-        "id": task_id,
-        "project_id": project_id,
-        "title": title,
-        "description": description,
-        "assignee_id": assignee_id,
-        "priority": priority,
-        "status": TaskStatus.TODO.value,
-        "due_date": due_date,
-        "parent_task_id": parent_task_id,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    tasks[task_id] = task
+    task = Task(
+        id=task_id,
+        project_id=project_id,
+        title=title,
+        description=description,
+        assignee_id=assignee_id,
+        priority=priority,
+        status=TaskStatus.TODO.value,
+        due_date=due_date,
+        parent_task_id=parent_task_id,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    tasks[task_id] = task.model_dump()
     _save()
     return task
 
 
 @mcp.tool
-def get_task(task_id: int) -> Optional[dict]:
+def get_task(task_id: int) -> Optional[Task]:
     """Get a task by ID.
 
     Args:
@@ -386,7 +441,9 @@ def get_task(task_id: int) -> Optional[dict]:
     Returns:
         Task details or None
     """
-    return tasks.get(task_id)
+    if task_id in tasks:
+        return Task(**tasks[task_id])
+    return None
 
 
 @mcp.tool
@@ -398,7 +455,7 @@ def update_task(
     priority: Optional[str] = None,
     status: Optional[str] = None,
     due_date: Optional[str] = None
-) -> Optional[dict]:
+) -> Optional[Task]:
     """Update a task.
 
     Args:
@@ -438,28 +495,11 @@ def update_task(
 
     task["updated_at"] = datetime.now().isoformat()
     _save()
-    return task
+    return Task(**task)
 
 
 @mcp.tool
-def delete_task(task_id: int) -> bool:
-    """Delete a task.
-
-    Args:
-        task_id: The task ID
-
-    Returns:
-        True if deleted, False if not found
-    """
-    if task_id in tasks:
-        del tasks[task_id]
-        _save()
-        return True
-    return False
-
-
-@mcp.tool
-def get_project_tasks(project_id: int, status: Optional[str] = None) -> list[dict]:
+def get_project_tasks(project_id: int, status: Optional[str] = None) -> list[Task]:
     """Get all tasks for a project.
 
     Args:
@@ -469,16 +509,16 @@ def get_project_tasks(project_id: int, status: Optional[str] = None) -> list[dic
     Returns:
         List of tasks
     """
-    result = [t for t in tasks.values() if t["project_id"] == project_id]
+    result = [Task(**t) for t in tasks.values() if t["project_id"] == project_id]
 
     if status:
-        result = [t for t in result if t["status"] == status]
+        result = [t for t in result if t.status == status]
 
-    return sorted(result, key=lambda x: (x["priority"], x["due_date"] or "zzzz"))
+    return sorted(result, key=lambda x: (x.priority, x.due_date or "zzzz"))
 
 
 @mcp.tool
-def get_subtasks(task_id: int) -> list[dict]:
+def get_subtasks(task_id: int) -> list[Task]:
     """Get all subtasks of a task.
 
     Args:
@@ -487,11 +527,11 @@ def get_subtasks(task_id: int) -> list[dict]:
     Returns:
         List of subtasks
     """
-    return [t for t in tasks.values() if t.get("parent_task_id") == task_id]
+    return [Task(**t) for t in tasks.values() if t.get("parent_task_id") == task_id]
 
 
 @mcp.tool
-def get_member_tasks(member_id: int) -> list[dict]:
+def get_member_tasks(member_id: int) -> list[Task]:
     """Get all tasks assigned to a team member.
 
     Args:
@@ -501,13 +541,13 @@ def get_member_tasks(member_id: int) -> list[dict]:
         List of tasks
     """
     return [
-        t for t in tasks.values()
+        Task(**t) for t in tasks.values()
         if t.get("assignee_id") == member_id and t["status"] not in [TaskStatus.DONE.value, TaskStatus.CANCELLED.value]
     ]
 
 
 @mcp.tool
-def get_overdue_tasks() -> list[dict]:
+def get_overdue_tasks() -> list[Task]:
     """Get all overdue tasks.
 
     Returns:
@@ -515,7 +555,7 @@ def get_overdue_tasks() -> list[dict]:
     """
     today = datetime.now().strftime("%Y-%m-%d")
     return [
-        t for t in tasks.values()
+        Task(**t) for t in tasks.values()
         if t["status"] not in [TaskStatus.DONE.value, TaskStatus.CANCELLED.value]
         and t.get("due_date") and t["due_date"] < today
     ]
@@ -528,7 +568,7 @@ def create_milestone(
     title: str,
     description: Optional[str] = None,
     due_date: Optional[str] = None
-) -> dict:
+) -> Milestone:
     """Create a milestone in a project.
 
     Args:
@@ -544,23 +584,23 @@ def create_milestone(
         raise ValueError(f"Project {project_id} not found")
 
     milestone_id = _get_next_milestone_id()
-    milestone = {
-        "id": milestone_id,
-        "project_id": project_id,
-        "title": title,
-        "description": description,
-        "due_date": due_date,
-        "completed": False,
-        "completed_at": None,
-        "created_at": datetime.now().isoformat()
-    }
-    milestones[milestone_id] = milestone
+    milestone = Milestone(
+        id=milestone_id,
+        project_id=project_id,
+        title=title,
+        description=description,
+        due_date=due_date,
+        completed=False,
+        completed_at=None,
+        created_at=datetime.now().isoformat()
+    )
+    milestones[milestone_id] = milestone.model_dump()
     _save()
     return milestone
 
 
 @mcp.tool
-def complete_milestone(milestone_id: int) -> Optional[dict]:
+def complete_milestone(milestone_id: int) -> Optional[Milestone]:
     """Mark a milestone as complete.
 
     Args:
@@ -576,11 +616,11 @@ def complete_milestone(milestone_id: int) -> Optional[dict]:
     milestone["completed"] = True
     milestone["completed_at"] = datetime.now().isoformat()
     _save()
-    return milestone
+    return Milestone(**milestone)
 
 
 @mcp.tool
-def get_project_milestones(project_id: int) -> list[dict]:
+def get_project_milestones(project_id: int) -> list[Milestone]:
     """Get all milestones for a project.
 
     Args:
@@ -589,7 +629,7 @@ def get_project_milestones(project_id: int) -> list[dict]:
     Returns:
         List of milestones
     """
-    return [m for m in milestones.values() if m["project_id"] == project_id]
+    return [Milestone(**m) for m in milestones.values() if m["project_id"] == project_id]
 
 
 # Analytics

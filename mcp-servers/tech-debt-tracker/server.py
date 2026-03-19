@@ -8,16 +8,13 @@ from typing import Optional
 from pathlib import Path
 import json
 from enum import Enum
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Tech Debt Tracker",
     instructions="A technical debt tracking server for managing debt items, prioritizing refactoring tasks, and monitoring code quality improvements."
 )
-
-# Data persistence setup
-DATA_DIR = Path(__file__).parent / "data"
-DATA_FILE = DATA_DIR / "tech_debt.json"
 
 
 class DebtPriority(str, Enum):
@@ -49,20 +46,77 @@ class DebtCategory(str, Enum):
 
 
 class EffortEstimate(str, Enum):
-    TRIVIAL = "trivial"  # < 1 hour
-    SMALL = "small"  # 1-4 hours
-    MEDIUM = "medium"  # 1-2 days
-    LARGE = "large"  # 3-5 days
-    VERY_LARGE = "very_large"  # 1-2 weeks
-    EPIC = "epic"  # 2+ weeks
+    TRIVIAL = "trivial"
+    SMALL = "small"
+    MEDIUM = "medium"
+    LARGE = "large"
+    VERY_LARGE = "very_large"
+    EPIC = "epic"
 
 
 class ImpactLevel(str, Enum):
-    CRITICAL = "critical"  # Blocking production
-    HIGH = "high"  # Significant user impact
-    MEDIUM = "medium"  # Moderate user impact
-    LOW = "low"  # Minor inconvenience
-    MINIMAL = "minimal"  # Internal only
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    MINIMAL = "minimal"
+
+
+class DebtItem(BaseModel):
+    """A technical debt item."""
+    id: int
+    title: str
+    description: Optional[str] = None
+    category: str
+    priority: str
+    status: str
+    impact: str
+    effort: str
+    component: Optional[str] = None
+    assignee: Optional[str] = None
+    interest_rate: float = 0.0
+    created_at: str
+    updated_at: str
+
+
+class RefactoringTask(BaseModel):
+    """A refactoring task."""
+    id: int
+    debt_item_id: Optional[int] = None
+    title: str
+    description: Optional[str] = None
+    status: str
+    assigned_to: Optional[str] = None
+    estimated_effort: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class QualityMetric(BaseModel):
+    """A code quality metric."""
+    id: int
+    name: str
+    value: float
+    unit: str
+    threshold: Optional[float] = None
+    recorded_at: str
+
+
+class DebtSnapshot(BaseModel):
+    """A snapshot of tech debt at a point in time."""
+    id: int
+    date: str
+    total_items: int
+    open_items: int
+    resolved_items: int
+    by_category: dict = {}
+    by_priority: dict = {}
+    created_at: str
+
+
+# Data persistence setup
+DATA_DIR = Path(__file__).parent / "data"
+DATA_FILE = DATA_DIR / "tech_debt.json"
 
 
 def _load_data() -> dict:

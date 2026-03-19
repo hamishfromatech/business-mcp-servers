@@ -8,12 +8,33 @@ from typing import Optional
 from pathlib import Path
 import json
 import re
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Document Wiki",
     instructions="A wiki server for creating, organizing, and linking knowledge base documents."
 )
+
+
+class Document(BaseModel):
+    """A wiki document."""
+    id: int
+    title: str
+    content: str
+    category_id: Optional[int] = None
+    tags: list[str] = []
+    links_to: list[str] = []
+    created_at: str
+    updated_at: str
+
+
+class Category(BaseModel):
+    """A document category."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    created_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -72,7 +93,7 @@ def _extract_wikilinks(content: str) -> list[str]:
 
 # Category Management
 @mcp.tool
-def create_category(name: str, description: Optional[str] = None) -> dict:
+def create_category(name: str, description: Optional[str] = None) -> Category:
     """Create a new category for organizing documents.
 
     Args:
@@ -83,25 +104,25 @@ def create_category(name: str, description: Optional[str] = None) -> dict:
         The created category
     """
     category_id = _get_next_cat_id()
-    category = {
-        "id": category_id,
-        "name": name,
-        "description": description,
-        "created_at": datetime.now().isoformat()
-    }
-    categories[category_id] = category
+    category = Category(
+        id=category_id,
+        name=name,
+        description=description,
+        created_at=datetime.now().isoformat()
+    )
+    categories[category_id] = category.model_dump()
     _save()
     return category
 
 
 @mcp.tool
-def list_categories() -> list[dict]:
+def list_categories() -> list[Category]:
     """List all categories.
 
     Returns:
         List of all categories
     """
-    return list(categories.values())
+    return [Category(**c) for c in categories.values()]
 
 
 # Document Management
@@ -111,7 +132,7 @@ def create_document(
     content: str,
     category_id: Optional[int] = None,
     tags: Optional[list[str]] = None
-) -> dict:
+) -> Document:
     """Create a new wiki document.
 
     Args:
@@ -124,23 +145,23 @@ def create_document(
         The created document
     """
     doc_id = _get_next_doc_id()
-    doc = {
-        "id": doc_id,
-        "title": title,
-        "content": content,
-        "category_id": category_id,
-        "tags": tags or [],
-        "links_to": _extract_wikilinks(content),
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    documents[doc_id] = doc
+    doc = Document(
+        id=doc_id,
+        title=title,
+        content=content,
+        category_id=category_id,
+        tags=tags or [],
+        links_to=_extract_wikilinks(content),
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    documents[doc_id] = doc.model_dump()
     _save()
     return doc
 
 
 @mcp.tool
-def get_document(document_id: int) -> Optional[dict]:
+def get_document(document_id: int) -> Optional[Document]:
     """Get a document by ID.
 
     Args:
@@ -149,11 +170,14 @@ def get_document(document_id: int) -> Optional[dict]:
     Returns:
         Document details or None
     """
-    return documents.get(document_id)
+    data = documents.get(document_id)
+    if data is None:
+        return None
+    return Document(**data)
 
 
 @mcp.tool
-def get_document_by_title(title: str) -> Optional[dict]:
+def get_document_by_title(title: str) -> Optional[Document]:
     """Get a document by its title.
 
     Args:
@@ -164,7 +188,7 @@ def get_document_by_title(title: str) -> Optional[dict]:
     """
     for doc in documents.values():
         if doc["title"].lower() == title.lower():
-            return doc
+            return Document(**doc)
     return None
 
 
@@ -175,7 +199,7 @@ def update_document(
     content: Optional[str] = None,
     category_id: Optional[int] = None,
     tags: Optional[list[str]] = None
-) -> Optional[dict]:
+) -> Optional[Document]:
     """Update an existing document.
 
     Args:
@@ -204,7 +228,7 @@ def update_document(
     doc["updated_at"] = datetime.now().isoformat()
     _save()
 
-    return doc
+    return Document(**doc)
 
 
 @mcp.tool
@@ -225,7 +249,7 @@ def delete_document(document_id: int) -> bool:
 
 
 @mcp.tool
-def search_documents(query: str) -> list[dict]:
+def search_documents(query: str) -> list[Document]:
     """Search documents by title, content, or tags.
 
     Args:
@@ -243,13 +267,13 @@ def search_documents(query: str) -> list[dict]:
             query_lower in doc["content"].lower() or
             any(query_lower in tag.lower() for tag in doc.get("tags", []))
         ):
-            results.append(doc)
+            results.append(Document(**doc))
 
     return results
 
 
 @mcp.tool
-def get_documents_by_category(category_id: int) -> list[dict]:
+def get_documents_by_category(category_id: int) -> list[Document]:
     """Get all documents in a category.
 
     Args:
@@ -259,13 +283,13 @@ def get_documents_by_category(category_id: int) -> list[dict]:
         List of documents in the category
     """
     return [
-        doc for doc in documents.values()
+        Document(**doc) for doc in documents.values()
         if doc.get("category_id") == category_id
     ]
 
 
 @mcp.tool
-def get_documents_by_tag(tag: str) -> list[dict]:
+def get_documents_by_tag(tag: str) -> list[Document]:
     """Get all documents with a specific tag.
 
     Args:
@@ -276,13 +300,13 @@ def get_documents_by_tag(tag: str) -> list[dict]:
     """
     tag_lower = tag.lower()
     return [
-        doc for doc in documents.values()
+        Document(**doc) for doc in documents.values()
         if any(t.lower() == tag_lower for t in doc.get("tags", []))
     ]
 
 
 @mcp.tool
-def get_linked_documents(document_id: int) -> list[dict]:
+def get_linked_documents(document_id: int) -> list[Document]:
     """Get documents that this document links to (via [[wiki links]]).
 
     Args:
@@ -306,7 +330,7 @@ def get_linked_documents(document_id: int) -> list[dict]:
 
 
 @mcp.tool
-def get_backlinks(document_id: int) -> list[dict]:
+def get_backlinks(document_id: int) -> list[Document]:
     """Get documents that link to this document.
 
     Args:
@@ -326,7 +350,7 @@ def get_backlinks(document_id: int) -> list[dict]:
         if other_doc["id"] == document_id:
             continue
         if any(title == link.lower() for link in other_doc.get("links_to", [])):
-            backlinks.append(other_doc)
+            backlinks.append(Document(**other_doc))
 
     return backlinks
 

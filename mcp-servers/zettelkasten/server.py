@@ -9,12 +9,24 @@ from pathlib import Path
 import json
 import re
 from collections import deque
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Zettelkasten",
     instructions="A Zettelkasten (slip-box) server for creating and linking atomic notes with bi-directional references."
 )
+
+
+class Note(BaseModel):
+    """A Zettelkasten note."""
+    id: int
+    title: str
+    content: str
+    tags: list[str] = []
+    links_to: list[int] = []
+    created_at: str
+    updated_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -118,7 +130,7 @@ def create_note(
     content: str,
     source: Optional[str] = None,
     note_type: str = "permanent"
-) -> dict:
+) -> Note:
     """Create a new Zettelkasten note.
 
     Args:
@@ -134,18 +146,16 @@ def create_note(
     extracted_tags = _extract_tags(content)
     linked_ids = _extract_wikilinks(content)
 
-    note = {
-        "id": note_id,
-        "title": title,
-        "content": content,
-        "source": source,
-        "note_type": note_type,
-        "tags": extracted_tags,
-        "links_to": linked_ids,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    notes[note_id] = note
+    note = Note(
+        id=note_id,
+        title=title,
+        content=content,
+        tags=extracted_tags,
+        links_to=linked_ids,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    notes[note_id] = note.model_dump()
 
     # Update indices
     _update_links(note_id, linked_ids)
@@ -156,7 +166,7 @@ def create_note(
 
 
 @mcp.tool
-def get_note(note_id: int) -> Optional[dict]:
+def get_note(note_id: int) -> Optional[Note]:
     """Get a note by ID.
 
     Args:
@@ -165,7 +175,9 @@ def get_note(note_id: int) -> Optional[dict]:
     Returns:
         Note details or None
     """
-    return notes.get(note_id)
+    if note_id in notes:
+        return Note(**notes[note_id])
+    return None
 
 
 @mcp.tool
@@ -196,7 +208,7 @@ def update_note(
     content: Optional[str] = None,
     source: Optional[str] = None,
     note_type: Optional[str] = None
-) -> Optional[dict]:
+) -> Optional[Note]:
     """Update a note.
 
     Args:
@@ -231,7 +243,7 @@ def update_note(
 
     note["updated_at"] = datetime.now().isoformat()
     _save()
-    return note
+    return Note(**note)
 
 
 @mcp.tool
@@ -276,7 +288,7 @@ def list_notes(
     note_type: Optional[str] = None,
     limit: int = 50,
     offset: int = 0
-) -> list[dict]:
+) -> list[Note]:
     """List notes with optional filter.
 
     Args:
@@ -293,12 +305,12 @@ def list_notes(
         result = [n for n in result if n.get("note_type") == note_type]
 
     result.sort(key=lambda x: x["updated_at"], reverse=True)
-    return result[offset:offset + limit]
+    return [Note(**n) for n in result[offset:offset + limit]]
 
 
 # Linking
 @mcp.tool
-def link_notes(from_note_id: int, to_note_id: int) -> Optional[dict]:
+def link_notes(from_note_id: int, to_note_id: int) -> Optional[Note]:
     """Create a link between two notes.
 
     Args:
@@ -318,11 +330,11 @@ def link_notes(from_note_id: int, to_note_id: int) -> Optional[dict]:
         note["updated_at"] = datetime.now().isoformat()
         _save()
 
-    return note
+    return Note(**note)
 
 
 @mcp.tool
-def unlink_notes(from_note_id: int, to_note_id: int) -> Optional[dict]:
+def unlink_notes(from_note_id: int, to_note_id: int) -> Optional[Note]:
     """Remove a link between two notes.
 
     Args:
@@ -342,11 +354,11 @@ def unlink_notes(from_note_id: int, to_note_id: int) -> Optional[dict]:
         note["updated_at"] = datetime.now().isoformat()
         _save()
 
-    return note
+    return Note(**note)
 
 
 @mcp.tool
-def get_backlinks(note_id: int) -> list[dict]:
+def get_backlinks(note_id: int) -> list[Note]:
     """Get all notes that link to this note.
 
     Args:
@@ -358,11 +370,11 @@ def get_backlinks(note_id: int) -> list[dict]:
     if note_id not in links:
         return []
 
-    return [notes[nid] for nid in links[note_id] if nid in notes]
+    return [Note(**notes[nid]) for nid in links[note_id] if nid in notes]
 
 
 @mcp.tool
-def get_outgoing_links(note_id: int) -> list[dict]:
+def get_outgoing_links(note_id: int) -> list[Note]:
     """Get all notes this note links to.
 
     Args:
@@ -374,12 +386,12 @@ def get_outgoing_links(note_id: int) -> list[dict]:
     if note_id not in notes:
         return []
 
-    return [notes[nid] for nid in notes[note_id].get("links_to", []) if nid in notes]
+    return [Note(**notes[nid]) for nid in notes[note_id].get("links_to", []) if nid in notes]
 
 
 # Search and Discovery
 @mcp.tool
-def search_notes(query: str) -> list[dict]:
+def search_notes(query: str) -> list[Note]:
     """Search notes by title or content.
 
     Args:
@@ -390,13 +402,13 @@ def search_notes(query: str) -> list[dict]:
     """
     query_lower = query.lower()
     return [
-        n for n in notes.values()
+        Note(**n) for n in notes.values()
         if query_lower in n["title"].lower() or query_lower in n["content"].lower()
     ]
 
 
 @mcp.tool
-def get_notes_by_tag(tag: str) -> list[dict]:
+def get_notes_by_tag(tag: str) -> list[Note]:
     """Get all notes with a specific tag.
 
     Args:
@@ -409,7 +421,7 @@ def get_notes_by_tag(tag: str) -> list[dict]:
     if tag_lower not in tags:
         return []
 
-    return [notes[nid] for nid in tags[tag_lower] if nid in notes]
+    return [Note(**notes[nid]) for nid in tags[tag_lower] if nid in notes]
 
 
 @mcp.tool

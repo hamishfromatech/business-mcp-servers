@@ -8,12 +8,25 @@ from typing import Optional
 from pathlib import Path
 import json
 import re
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Journal",
     instructions="A personal journal server for creating, organizing, and reflecting on daily entries."
 )
+
+
+class Entry(BaseModel):
+    """A journal entry."""
+    id: int
+    title: str
+    content: str
+    mood: Optional[str] = None
+    date: str
+    tags: list[str] = []
+    created_at: str
+    updated_at: str
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -81,7 +94,7 @@ def create_entry(
     title: Optional[str] = None,
     mood: Optional[str] = None,
     date: Optional[str] = None
-) -> dict:
+) -> Entry:
     """Create a new journal entry.
 
     Args:
@@ -96,17 +109,17 @@ def create_entry(
     entry_id = _get_next_entry_id()
     extracted_tags = _extract_tags(content)
 
-    entry = {
-        "id": entry_id,
-        "title": title or datetime.now().strftime("%A, %B %d, %Y"),
-        "content": content,
-        "mood": mood,
-        "date": date or datetime.now().strftime("%Y-%m-%d"),
-        "tags": extracted_tags,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    entries[entry_id] = entry
+    entry = Entry(
+        id=entry_id,
+        title=title or datetime.now().strftime("%A, %B %d, %Y"),
+        content=content,
+        mood=mood,
+        date=date or datetime.now().strftime("%Y-%m-%d"),
+        tags=extracted_tags,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    entries[entry_id] = entry.model_dump()
 
     # Update tag counts
     for tag in extracted_tags:
@@ -117,7 +130,7 @@ def create_entry(
 
 
 @mcp.tool
-def get_entry(entry_id: int) -> Optional[dict]:
+def get_entry(entry_id: int) -> Optional[Entry]:
     """Get a journal entry by ID.
 
     Args:
@@ -126,11 +139,13 @@ def get_entry(entry_id: int) -> Optional[dict]:
     Returns:
         Entry details or None
     """
-    return entries.get(entry_id)
+    if entry_id in entries:
+        return Entry(**entries[entry_id])
+    return None
 
 
 @mcp.tool
-def get_entry_by_date(date: str) -> Optional[dict]:
+def get_entry_by_date(date: str) -> Optional[Entry]:
     """Get the journal entry for a specific date.
 
     Args:
@@ -141,7 +156,7 @@ def get_entry_by_date(date: str) -> Optional[dict]:
     """
     for entry in entries.values():
         if entry["date"] == date:
-            return entry
+            return Entry(**entry)
     return None
 
 
@@ -151,7 +166,7 @@ def update_entry(
     content: Optional[str] = None,
     title: Optional[str] = None,
     mood: Optional[str] = None
-) -> Optional[dict]:
+) -> Optional[Entry]:
     """Update a journal entry.
 
     Args:
@@ -183,7 +198,7 @@ def update_entry(
     _update_tag_counts(old_tags, entry["tags"])
     _save()
 
-    return entry
+    return Entry(**entry)
 
 
 @mcp.tool
@@ -211,7 +226,7 @@ def list_entries(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     limit: int = 50
-) -> list[dict]:
+) -> list[Entry]:
     """List journal entries with optional date filter.
 
     Args:
@@ -230,11 +245,11 @@ def list_entries(
         result = [e for e in result if e["date"] <= end_date]
 
     result.sort(key=lambda x: x["date"], reverse=True)
-    return result[:limit]
+    return [Entry(**e) for e in result[:limit]]
 
 
 @mcp.tool
-def search_entries(query: str) -> list[dict]:
+def search_entries(query: str) -> list[Entry]:
     """Search journal entries by content or title.
 
     Args:
@@ -245,14 +260,14 @@ def search_entries(query: str) -> list[dict]:
     """
     query_lower = query.lower()
     return [
-        e for e in entries.values()
+        Entry(**e) for e in entries.values()
         if (query_lower in e["content"].lower() or
             query_lower in e.get("title", "").lower())
     ]
 
 
 @mcp.tool
-def get_entries_by_tag(tag: str) -> list[dict]:
+def get_entries_by_tag(tag: str) -> list[Entry]:
     """Get all entries with a specific tag.
 
     Args:
@@ -263,13 +278,13 @@ def get_entries_by_tag(tag: str) -> list[dict]:
     """
     tag_lower = tag.lower()
     return [
-        e for e in entries.values()
+        Entry(**e) for e in entries.values()
         if tag_lower in [t.lower() for t in e.get("tags", [])]
     ]
 
 
 @mcp.tool
-def get_entries_by_mood(mood: str) -> list[dict]:
+def get_entries_by_mood(mood: str) -> list[Entry]:
     """Get all entries with a specific mood.
 
     Args:
@@ -280,7 +295,7 @@ def get_entries_by_mood(mood: str) -> list[dict]:
     """
     mood_lower = mood.lower()
     return [
-        e for e in entries.values()
+        Entry(**e) for e in entries.values()
         if e.get("mood", "").lower() == mood_lower
     ]
 

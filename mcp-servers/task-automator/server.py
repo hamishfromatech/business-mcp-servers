@@ -8,12 +8,58 @@ from typing import Optional
 from pathlib import Path
 import json
 import uuid
+from pydantic import BaseModel
 from fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Task Automator",
     instructions="A task automation server for creating workflows, templates, and automating repetitive tasks."
 )
+
+
+class Workflow(BaseModel):
+    """A workflow definition."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    steps: list = []
+    enabled: bool = True
+    created_at: str
+    updated_at: str
+
+
+class Template(BaseModel):
+    """A reusable template."""
+    id: int
+    name: str
+    content: str
+    variables: list[str] = []
+    category: Optional[str] = None
+    created_at: str
+
+
+class Trigger(BaseModel):
+    """A workflow trigger."""
+    id: int
+    name: str
+    workflow_id: int
+    trigger_type: str
+    config: dict = {}
+    enabled: bool = True
+    created_at: str
+
+
+class Execution(BaseModel):
+    """A workflow execution record."""
+    id: int
+    workflow_id: int
+    workflow_name: str
+    context: dict = {}
+    steps_executed: int = 0
+    status: str
+    results: list = []
+    started_at: str
+    completed_at: Optional[str] = None
 
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
@@ -95,7 +141,7 @@ def create_workflow(
     name: str,
     description: Optional[str] = None,
     steps: Optional[list[dict]] = None
-) -> dict:
+) -> Workflow:
     """Create a new workflow.
 
     Args:
@@ -107,22 +153,22 @@ def create_workflow(
         The created workflow
     """
     workflow_id = _get_next_workflow_id()
-    workflow = {
-        "id": workflow_id,
-        "name": name,
-        "description": description,
-        "steps": steps or [],
-        "enabled": True,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    workflows[workflow_id] = workflow
+    workflow = Workflow(
+        id=workflow_id,
+        name=name,
+        description=description,
+        steps=steps or [],
+        enabled=True,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat()
+    )
+    workflows[workflow_id] = workflow.model_dump()
     _save()
     return workflow
 
 
 @mcp.tool
-def get_workflow(workflow_id: int) -> Optional[dict]:
+def get_workflow(workflow_id: int) -> Optional[Workflow]:
     """Get a workflow by ID.
 
     Args:
@@ -131,7 +177,9 @@ def get_workflow(workflow_id: int) -> Optional[dict]:
     Returns:
         Workflow details or None
     """
-    return workflows.get(workflow_id)
+    if workflow_id in workflows:
+        return Workflow(**workflows[workflow_id])
+    return None
 
 
 @mcp.tool
@@ -141,7 +189,7 @@ def update_workflow(
     description: Optional[str] = None,
     steps: Optional[list[dict]] = None,
     enabled: Optional[bool] = None
-) -> Optional[dict]:
+) -> Optional[Workflow]:
     """Update a workflow.
 
     Args:
@@ -169,7 +217,7 @@ def update_workflow(
 
     workflow["updated_at"] = datetime.now().isoformat()
     _save()
-    return workflow
+    return Workflow(**workflow)
 
 
 @mcp.tool
@@ -190,7 +238,7 @@ def delete_workflow(workflow_id: int) -> bool:
 
 
 @mcp.tool
-def list_workflows(enabled_only: bool = False) -> list[dict]:
+def list_workflows(enabled_only: bool = False) -> list[Workflow]:
     """List all workflows.
 
     Args:
@@ -202,7 +250,7 @@ def list_workflows(enabled_only: bool = False) -> list[dict]:
     result = list(workflows.values())
     if enabled_only:
         result = [w for w in result if w.get("enabled")]
-    return result
+    return [Workflow(**w) for w in result]
 
 
 @mcp.tool
@@ -212,7 +260,7 @@ def add_workflow_step(
     params: Optional[dict] = None,
     condition: Optional[str] = None,
     position: Optional[int] = None
-) -> Optional[dict]:
+) -> Optional[Workflow]:
     """Add a step to a workflow.
 
     Args:
@@ -242,7 +290,7 @@ def add_workflow_step(
 
     workflow["updated_at"] = datetime.now().isoformat()
     _save()
-    return workflow
+    return Workflow(**workflow)
 
 
 # Template Management
@@ -252,7 +300,7 @@ def create_template(
     content: str,
     variables: Optional[list[str]] = None,
     category: Optional[str] = None
-) -> dict:
+) -> Template:
     """Create a reusable template.
 
     Args:
@@ -265,21 +313,21 @@ def create_template(
         The created template
     """
     template_id = _get_next_template_id()
-    template = {
-        "id": template_id,
-        "name": name,
-        "content": content,
-        "variables": variables or [],
-        "category": category,
-        "created_at": datetime.now().isoformat()
-    }
-    templates[template_id] = template
+    template = Template(
+        id=template_id,
+        name=name,
+        content=content,
+        variables=variables or [],
+        category=category,
+        created_at=datetime.now().isoformat()
+    )
+    templates[template_id] = template.model_dump()
     _save()
     return template
 
 
 @mcp.tool
-def get_template(template_id: int) -> Optional[dict]:
+def get_template(template_id: int) -> Optional[Template]:
     """Get a template by ID.
 
     Args:
@@ -288,7 +336,9 @@ def get_template(template_id: int) -> Optional[dict]:
     Returns:
         Template details or None
     """
-    return templates.get(template_id)
+    if template_id in templates:
+        return Template(**templates[template_id])
+    return None
 
 
 @mcp.tool
@@ -316,7 +366,7 @@ def render_template(template_id: int, variables: dict) -> Optional[str]:
 
 
 @mcp.tool
-def list_templates(category: Optional[str] = None) -> list[dict]:
+def list_templates(category: Optional[str] = None) -> list[Template]:
     """List all templates.
 
     Args:
@@ -328,7 +378,7 @@ def list_templates(category: Optional[str] = None) -> list[dict]:
     result = list(templates.values())
     if category:
         result = [t for t in result if t.get("category") == category]
-    return result
+    return [Template(**t) for t in result]
 
 
 @mcp.tool
@@ -355,7 +405,7 @@ def create_trigger(
     workflow_id: int,
     trigger_type: str,
     config: Optional[dict] = None
-) -> dict:
+) -> Trigger:
     """Create a trigger for a workflow.
 
     Args:
@@ -371,22 +421,22 @@ def create_trigger(
         raise ValueError(f"Workflow {workflow_id} not found")
 
     trigger_id = _get_next_trigger_id()
-    trigger = {
-        "id": trigger_id,
-        "name": name,
-        "workflow_id": workflow_id,
-        "trigger_type": trigger_type,
-        "config": config or {},
-        "enabled": True,
-        "created_at": datetime.now().isoformat()
-    }
-    triggers[trigger_id] = trigger
+    trigger = Trigger(
+        id=trigger_id,
+        name=name,
+        workflow_id=workflow_id,
+        trigger_type=trigger_type,
+        config=config or {},
+        enabled=True,
+        created_at=datetime.now().isoformat()
+    )
+    triggers[trigger_id] = trigger.model_dump()
     _save()
     return trigger
 
 
 @mcp.tool
-def list_triggers(workflow_id: Optional[int] = None) -> list[dict]:
+def list_triggers(workflow_id: Optional[int] = None) -> list[Trigger]:
     """List all triggers.
 
     Args:
@@ -398,7 +448,7 @@ def list_triggers(workflow_id: Optional[int] = None) -> list[dict]:
     result = list(triggers.values())
     if workflow_id is not None:
         result = [t for t in result if t["workflow_id"] == workflow_id]
-    return result
+    return [Trigger(**t) for t in result]
 
 
 @mcp.tool
@@ -420,7 +470,7 @@ def delete_trigger(trigger_id: int) -> bool:
 
 # Execution
 @mcp.tool
-def execute_workflow(workflow_id: int, context: Optional[dict] = None) -> dict:
+def execute_workflow(workflow_id: int, context: Optional[dict] = None) -> Execution:
     """Execute a workflow.
 
     Args:
@@ -438,19 +488,20 @@ def execute_workflow(workflow_id: int, context: Optional[dict] = None) -> dict:
         raise ValueError(f"Workflow {workflow_id} is disabled")
 
     execution_id = _get_next_execution_id()
-    execution = {
-        "id": execution_id,
-        "workflow_id": workflow_id,
-        "workflow_name": workflow["name"],
-        "context": context or {},
-        "steps_executed": 0,
-        "status": "completed",
-        "results": [],
-        "started_at": datetime.now().isoformat(),
-        "completed_at": None
-    }
+    execution = Execution(
+        id=execution_id,
+        workflow_id=workflow_id,
+        workflow_name=workflow["name"],
+        context=context or {},
+        steps_executed=0,
+        status="completed",
+        results=[],
+        started_at=datetime.now().isoformat(),
+        completed_at=None
+    )
 
     # Execute each step
+    results = []
     for i, step in enumerate(workflow["steps"]):
         step_result = {
             "step": i + 1,
@@ -477,18 +528,19 @@ def execute_workflow(workflow_id: int, context: Optional[dict] = None) -> dict:
         else:
             step_result["output"] = f"Action '{action}' executed"
 
-        execution["results"].append(step_result)
-        execution["steps_executed"] += 1
+        results.append(step_result)
 
-    execution["completed_at"] = datetime.now().isoformat()
-    executions[execution_id] = execution
+    execution.results = results
+    execution.steps_executed = len(results)
+    execution.completed_at = datetime.now().isoformat()
+    executions[execution_id] = execution.model_dump()
     _save()
 
     return execution
 
 
 @mcp.tool
-def get_execution(execution_id: int) -> Optional[dict]:
+def get_execution(execution_id: int) -> Optional[Execution]:
     """Get an execution record.
 
     Args:
@@ -497,11 +549,13 @@ def get_execution(execution_id: int) -> Optional[dict]:
     Returns:
         Execution record or None
     """
-    return executions.get(execution_id)
+    if execution_id in executions:
+        return Execution(**executions[execution_id])
+    return None
 
 
 @mcp.tool
-def get_workflow_executions(workflow_id: int, limit: int = 10) -> list[dict]:
+def get_workflow_executions(workflow_id: int, limit: int = 10) -> list[Execution]:
     """Get execution history for a workflow.
 
     Args:
@@ -513,12 +567,12 @@ def get_workflow_executions(workflow_id: int, limit: int = 10) -> list[dict]:
     """
     result = [e for e in executions.values() if e["workflow_id"] == workflow_id]
     result.sort(key=lambda x: x["started_at"], reverse=True)
-    return result[:limit]
+    return [Execution(**e) for e in result[:limit]]
 
 
 # Snippets and Quick Actions
 @mcp.tool
-def create_snippet(name: str, code: str, language: str = "python") -> dict:
+def create_snippet(name: str, code: str, language: str = "python") -> Template:
     """Create a reusable code snippet.
 
     Args:
@@ -537,7 +591,7 @@ def create_snippet(name: str, code: str, language: str = "python") -> dict:
 
 
 @mcp.tool
-def list_snippets(language: Optional[str] = None) -> list[dict]:
+def list_snippets(language: Optional[str] = None) -> list[Template]:
     """List all code snippets.
 
     Args:
@@ -550,7 +604,7 @@ def list_snippets(language: Optional[str] = None) -> list[dict]:
     result = [t for t in templates.values() if t.get("name", "").startswith("snippet:")]
     if language:
         result = [t for t in result if t.get("category") == category]
-    return result
+    return [Template(**t) for t in result]
 
 
 @mcp.tool
