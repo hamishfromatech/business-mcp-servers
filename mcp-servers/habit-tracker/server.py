@@ -43,6 +43,47 @@ class CheckIn(BaseModel):
     notes: Optional[str] = None
     recorded_at: str
 
+
+class LeaderboardEntry(BaseModel):
+    """A leaderboard entry with streak info."""
+    id: int
+    name: str
+    current_streak: int
+    completion_rate_30d: float
+
+
+class HabitInfo(BaseModel):
+    """Basic habit info for summaries."""
+    id: int
+    name: str
+    color: str
+
+
+class DailySummary(BaseModel):
+    """Daily habit summary."""
+    date: str
+    total: int
+    completed: list[HabitInfo]
+    pending: list[HabitInfo]
+    completion_rate: float
+
+
+class DayEntry(BaseModel):
+    """A day entry in weekly overview."""
+    date: str
+    day_name: str
+    completed: int
+    total: int
+    percentage: float
+
+
+class WeeklyOverview(BaseModel):
+    """Weekly overview of habit completions."""
+    start_date: str
+    end_date: str
+    total_habits: int
+    days: list[DayEntry]
+
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
 DATA_FILE = DATA_DIR / "habits.json"
@@ -394,7 +435,7 @@ def get_habit_history(habit_id: int, days: int = 30) -> list[CheckIn]:
 
 # Analytics
 @mcp.tool
-def get_daily_summary(date: Optional[str] = None) -> dict:
+def get_daily_summary(date: Optional[str] = None) -> DailySummary:
     """Get a summary of all habits for a specific day.
 
     Args:
@@ -415,28 +456,29 @@ def get_daily_summary(date: Optional[str] = None) -> dict:
         key = _get_checkin_key(habit["id"], date_str)
         check_in_record = check_ins.get(key)
 
-        habit_info = {
-            "id": habit["id"],
-            "name": habit["name"],
-            "color": habit["color"]
-        }
+        habit_info = HabitInfo(
+            id=habit["id"],
+            name=habit["name"],
+            color=habit["color"]
+        )
 
         if check_in_record and check_in_record.get("completed"):
             completed.append(habit_info)
         else:
             pending.append(habit_info)
 
-    return {
-        "date": date_str,
-        "total": len(completed) + len(pending),
-        "completed": completed,
-        "pending": pending,
-        "completion_rate": round((len(completed) / (len(completed) + len(pending))) * 100, 1) if (len(completed) + len(pending)) > 0 else 0
-    }
+    total = len(completed) + len(pending)
+    return DailySummary(
+        date=date_str,
+        total=total,
+        completed=completed,
+        pending=pending,
+        completion_rate=round((len(completed) / total) * 100, 1) if total > 0 else 0
+    )
 
 
 @mcp.tool
-def get_streak_leaderboard() -> list[dict]:
+def get_streak_leaderboard() -> list[LeaderboardEntry]:
     """Get habits ranked by current streak.
 
     Returns:
@@ -449,18 +491,18 @@ def get_streak_leaderboard() -> list[dict]:
             continue
 
         streak = _calculate_streak(habit["id"])
-        leaderboard.append({
-            "id": habit["id"],
-            "name": habit["name"],
-            "current_streak": streak,
-            "completion_rate_30d": round(_calculate_completion_rate(habit["id"]), 1)
-        })
+        leaderboard.append(LeaderboardEntry(
+            id=habit["id"],
+            name=habit["name"],
+            current_streak=streak,
+            completion_rate_30d=round(_calculate_completion_rate(habit["id"]), 1)
+        ))
 
-    return sorted(leaderboard, key=lambda x: x["current_streak"], reverse=True)
+    return sorted(leaderboard, key=lambda x: x.current_streak, reverse=True)
 
 
 @mcp.tool
-def get_weekly_overview(start_date: Optional[str] = None) -> dict:
+def get_weekly_overview(start_date: Optional[str] = None) -> WeeklyOverview:
     """Get a weekly overview of habit completions.
 
     Args:
@@ -489,20 +531,20 @@ def get_weekly_overview(start_date: Optional[str] = None) -> dict:
             if check_ins.get(key, {}).get("completed"):
                 completed_count += 1
 
-        days.append({
-            "date": date_str,
-            "day_name": date.strftime("%A"),
-            "completed": completed_count,
-            "total": len(active_habits),
-            "percentage": round((completed_count / len(active_habits)) * 100, 1) if active_habits else 0
-        })
+        days.append(DayEntry(
+            date=date_str,
+            day_name=date.strftime("%A"),
+            completed=completed_count,
+            total=len(active_habits),
+            percentage=round((completed_count / len(active_habits)) * 100, 1) if active_habits else 0
+        ))
 
-    return {
-        "start_date": start.strftime("%Y-%m-%d"),
-        "end_date": (start + timedelta(days=6)).strftime("%Y-%m-%d"),
-        "total_habits": len(active_habits),
-        "days": days
-    }
+    return WeeklyOverview(
+        start_date=start.strftime("%Y-%m-%d"),
+        end_date=(start + timedelta(days=6)).strftime("%Y-%m-%d"),
+        total_habits=len(active_habits),
+        days=days
+    )
 
 
 # Resources
@@ -511,20 +553,20 @@ def get_today_resource() -> str:
     """Resource showing today's habit status."""
     summary = get_daily_summary()
 
-    lines = [f"# Habits for {summary['date']}\n"]
-    lines.append(f"**Completion Rate:** {summary['completion_rate']}%\n")
+    lines = [f"# Habits for {summary.date}\n"]
+    lines.append(f"**Completion Rate:** {summary.completion_rate}%\n")
 
     lines.append("## Completed")
-    if summary["completed"]:
-        for h in summary["completed"]:
-            lines.append(f"- [x] {h['name']}")
+    if summary.completed:
+        for h in summary.completed:
+            lines.append(f"- [x] {h.name}")
     else:
         lines.append("_No habits completed yet_")
 
     lines.append("\n## Pending")
-    if summary["pending"]:
-        for h in summary["pending"]:
-            lines.append(f"- [ ] {h['name']}")
+    if summary.pending:
+        for h in summary.pending:
+            lines.append(f"- [ ] {h.name}")
     else:
         lines.append("_All done!_")
 
@@ -543,7 +585,7 @@ def get_leaderboard_resource() -> str:
 
     for i, entry in enumerate(leaderboard, 1):
         emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-        lines.append(f"{emoji} **{entry['name']}** - {entry['current_streak']} day streak ({entry['completion_rate_30d']}% 30d)")
+        lines.append(f"{emoji} **{entry.name}** - {entry.current_streak} day streak ({entry.completion_rate_30d}% 30d)")
 
     return "\n".join(lines)
 

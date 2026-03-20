@@ -146,14 +146,18 @@ def create_category(name: str, icon: Optional[str] = None) -> Category:
 
 
 @mcp.tool
-def list_categories() -> list[dict]:
+def list_categories() -> list[Category]:
     """List all expense categories.
 
     Returns:
         List of categories
     """
-    default_cats = [{"name": c.value, "icon": None} for c in ExpenseCategory]
-    custom_cats = [Category(**c).model_dump() for c in categories.values()]
+    # Default categories with negative IDs to differentiate from custom categories
+    default_cats = [
+        Category(id=-(i+1), name=c.value, icon=None, created_at=datetime.now().isoformat())
+        for i, c in enumerate(ExpenseCategory)
+    ]
+    custom_cats = [Category(**c) for c in categories.values()]
     return default_cats + custom_cats
 
 

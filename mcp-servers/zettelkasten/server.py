@@ -28,6 +28,50 @@ class Note(BaseModel):
     created_at: str
     updated_at: str
 
+
+class Tag(BaseModel):
+    """A tag with note count."""
+    tag: str
+    count: int
+
+
+class HubNote(BaseModel):
+    """A hub note with backlink count."""
+    id: int
+    title: str
+    content: str
+    tags: list[str] = []
+    links_to: list[int] = []
+    created_at: str
+    updated_at: str
+    backlink_count: int
+
+
+class NoteWithBacklinks(BaseModel):
+    """A note with its backlinks."""
+    id: int
+    title: str
+    content: str
+    tags: list[str] = []
+    links_to: list[int] = []
+    created_at: str
+    updated_at: str
+    backlinks: list[Note]
+    backlink_count: int
+
+
+class RelatedNote(BaseModel):
+    """A related note with relationship info."""
+    id: int
+    title: str
+    content: str
+    tags: list[str] = []
+    links_to: list[int] = []
+    created_at: str
+    updated_at: str
+    relationship: str
+    distance: int
+
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
 DATA_FILE = DATA_DIR / "zettelkasten.json"
@@ -181,7 +225,7 @@ def get_note(note_id: int) -> Optional[Note]:
 
 
 @mcp.tool
-def get_note_with_backlinks(note_id: int) -> Optional[dict]:
+def get_note_with_backlinks(note_id: int) -> Optional[NoteWithBacklinks]:
     """Get a note with its backlinks (notes that link to it).
 
     Args:
@@ -193,12 +237,19 @@ def get_note_with_backlinks(note_id: int) -> Optional[dict]:
     if note_id not in notes:
         return None
 
-    note = notes[note_id].copy()
+    note = notes[note_id]
     backlinks = get_backlinks(note_id)
-    note["backlinks"] = backlinks
-    note["backlink_count"] = len(backlinks)
-
-    return note
+    return NoteWithBacklinks(
+        id=note["id"],
+        title=note["title"],
+        content=note["content"],
+        tags=note.get("tags", []),
+        links_to=note.get("links_to", []),
+        created_at=note["created_at"],
+        updated_at=note["updated_at"],
+        backlinks=backlinks,
+        backlink_count=len(backlinks)
+    )
 
 
 @mcp.tool
@@ -425,20 +476,20 @@ def get_notes_by_tag(tag: str) -> list[Note]:
 
 
 @mcp.tool
-def get_all_tags() -> list[dict]:
+def get_all_tags() -> list[Tag]:
     """Get all tags with note counts.
 
     Returns:
         List of tags with counts
     """
     return [
-        {"tag": tag, "count": len(note_ids)}
+        Tag(tag=tag, count=len(note_ids))
         for tag, note_ids in sorted(tags.items(), key=lambda x: (-len(x[1]), x[0]))
     ]
 
 
 @mcp.tool
-def get_hub_notes(min_backlinks: int = 3) -> list[dict]:
+def get_hub_notes(min_backlinks: int = 3) -> list[HubNote]:
     """Get notes that are highly linked (hub notes).
 
     Args:
@@ -450,15 +501,23 @@ def get_hub_notes(min_backlinks: int = 3) -> list[dict]:
     hubs = []
     for note_id, backlink_ids in links.items():
         if len(backlink_ids) >= min_backlinks and note_id in notes:
-            note = notes[note_id].copy()
-            note["backlink_count"] = len(backlink_ids)
-            hubs.append(note)
+            note = notes[note_id]
+            hubs.append(HubNote(
+                id=note["id"],
+                title=note["title"],
+                content=note["content"],
+                tags=note.get("tags", []),
+                links_to=note.get("links_to", []),
+                created_at=note["created_at"],
+                updated_at=note["updated_at"],
+                backlink_count=len(backlink_ids)
+            ))
 
-    return sorted(hubs, key=lambda x: x["backlink_count"], reverse=True)
+    return sorted(hubs, key=lambda x: x.backlink_count, reverse=True)
 
 
 @mcp.tool
-def get_orphan_notes() -> list[dict]:
+def get_orphan_notes() -> list[Note]:
     """Get notes with no incoming or outgoing links.
 
     Returns:
@@ -470,7 +529,7 @@ def get_orphan_notes() -> list[dict]:
         has_incoming = note_id in links and bool(links[note_id])
 
         if not has_outgoing and not has_incoming:
-            orphans.append(note)
+            orphans.append(Note(**note))
 
     return orphans
 
@@ -522,7 +581,7 @@ def get_note_path(from_note_id: int, to_note_id: int, max_depth: int = 5) -> Opt
 
 
 @mcp.tool
-def get_related_notes(note_id: int, max_distance: int = 2) -> list[dict]:
+def get_related_notes(note_id: int, max_distance: int = 2) -> list[RelatedNote]:
     """Get notes related to this note through shared links.
 
     Args:
@@ -560,7 +619,17 @@ def get_related_notes(note_id: int, max_distance: int = 2) -> list[dict]:
                             related[nnid] = {"relationship": "second_degree", "distance": 2}
 
     return [
-        {**notes[nid], "relationship": info["relationship"], "distance": info["distance"]}
+        RelatedNote(
+            id=notes[nid]["id"],
+            title=notes[nid]["title"],
+            content=notes[nid]["content"],
+            tags=notes[nid].get("tags", []),
+            links_to=notes[nid].get("links_to", []),
+            created_at=notes[nid]["created_at"],
+            updated_at=notes[nid]["updated_at"],
+            relationship=info["relationship"],
+            distance=info["distance"]
+        )
         for nid, info in related.items()
         if nid in notes
     ]
@@ -633,9 +702,8 @@ def get_hubs_resource() -> str:
     lines.append("These notes are highly connected and serve as central ideas.\n")
 
     for hub in hubs:
-        lines.append(f"## [[{hub['id']}]] {hub['title']}")
-        lines.append(f"- **Backlinks:** {hub['backlink_count']}")
-        lines.append(f"- **Type:** {hub.get('note_type', 'permanent')}")
+        lines.append(f"## [[{hub.id}]] {hub.title}")
+        lines.append(f"- **Backlinks:** {hub.backlink_count}")
         lines.append("")
 
     return "\n".join(lines)
@@ -653,7 +721,7 @@ def get_orphans_resource() -> str:
     lines.append("These notes have no connections. Consider linking them to related ideas.\n")
 
     for note in orphans:
-        lines.append(f"- [[{note['id']}]] {note['title']}")
+        lines.append(f"- [[{note.id}]] {note.title}")
 
     return "\n".join(lines)
 
@@ -668,7 +736,7 @@ def get_tags_resource() -> str:
 
     lines = ["# Tags\n"]
     for tag_info in all_tags:
-        lines.append(f"- **#{tag_info['tag']}** ({tag_info['count']} notes)")
+        lines.append(f"- **#{tag_info.tag}** ({tag_info.count} notes)")
 
     return "\n".join(lines)
 

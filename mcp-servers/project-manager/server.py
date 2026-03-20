@@ -338,7 +338,7 @@ def delete_project(project_id: int) -> bool:
 
 
 @mcp.tool
-def add_member_to_project(project_id: int, member_id: int) -> Optional[dict]:
+def add_member_to_project(project_id: int, member_id: int) -> Optional[Project]:
     """Add a team member to a project.
 
     Args:
@@ -359,11 +359,11 @@ def add_member_to_project(project_id: int, member_id: int) -> Optional[dict]:
         project["updated_at"] = datetime.now().isoformat()
         _save()
 
-    return project
+    return Project(**project)
 
 
 @mcp.tool
-def list_projects(status: Optional[str] = None) -> list[dict]:
+def list_projects(status: Optional[str] = None) -> list[Project]:
     """List projects with optional filter.
 
     Args:
@@ -372,12 +372,12 @@ def list_projects(status: Optional[str] = None) -> list[dict]:
     Returns:
         List of projects
     """
-    result = list(projects.values())
+    result = [Project(**p) for p in projects.values()]
 
     if status:
-        result = [p for p in result if p["status"] == status]
+        result = [p for p in result if p.status == status]
 
-    return sorted(result, key=lambda x: x["updated_at"], reverse=True)
+    return sorted(result, key=lambda x: x.updated_at, reverse=True)
 
 
 # Task Management

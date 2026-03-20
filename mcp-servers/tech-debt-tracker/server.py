@@ -72,9 +72,17 @@ class DebtItem(BaseModel):
     status: str
     impact: str
     effort: str
+    file_path: Optional[str] = None
     component: Optional[str] = None
-    assignee: Optional[str] = None
-    interest_rate: float = 0.0
+    assigned_to: Optional[str] = None
+    tags: list[str] = []
+    related_items: list[int] = []
+    business_value: Optional[str] = None
+    resolution: Optional[str] = None
+    resolution_date: Optional[str] = None
+    resolved_by: Optional[str] = None
+    interest_accrued: float = 0.0
+    interest_notes: list[dict] = []
     created_at: str
     updated_at: str
 
@@ -82,12 +90,21 @@ class DebtItem(BaseModel):
 class RefactoringTask(BaseModel):
     """A refactoring task."""
     id: int
-    debt_item_id: Optional[int] = None
     title: str
     description: Optional[str] = None
-    status: str
+    debt_ids: list[int] = []
+    file_paths: list[str] = []
+    effort: str = "medium"
+    benefits: list[str] = []
+    risks: list[str] = []
+    prerequisites: list[int] = []
+    status: str = "pending"
     assigned_to: Optional[str] = None
-    estimated_effort: Optional[str] = None
+    progress: int = 0
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    completion_summary: Optional[str] = None
+    completed_by: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -98,20 +115,23 @@ class QualityMetric(BaseModel):
     name: str
     value: float
     unit: str
+    component: Optional[str] = None
     threshold: Optional[float] = None
-    recorded_at: str
+    notes: Optional[str] = None
+    meets_threshold: Optional[bool] = None
+    created_at: str
 
 
 class DebtSnapshot(BaseModel):
     """A snapshot of tech debt at a point in time."""
     id: int
-    date: str
-    total_items: int
-    open_items: int
-    resolved_items: int
-    by_category: dict = {}
-    by_priority: dict = {}
-    created_at: str
+    name: str
+    description: Optional[str] = None
+    timestamp: str
+    statistics: dict = {}
+    debt_item_ids: list[int] = []
+    task_ids: list[int] = []
+    created_at: Optional[str] = None
 
 
 # Data persistence setup
@@ -212,7 +232,7 @@ def create_debt_item(
     tags: Optional[list[str]] = None,
     related_items: Optional[list[int]] = None,
     business_value: Optional[str] = None,
-) -> dict:
+) -> DebtItem:
     """Create a new technical debt item.
 
     Args:
@@ -249,6 +269,7 @@ def create_debt_item(
         "assigned_to": None,
         "resolution": None,
         "resolution_date": None,
+        "resolved_by": None,
         "interest_accrued": 0,  # Tracks how much "interest" (extra work) this debt has caused
         "interest_notes": [],
         "created_at": datetime.now().isoformat(),
@@ -256,11 +277,11 @@ def create_debt_item(
     }
     debt_items[debt_id] = debt
     _save()
-    return debt
+    return DebtItem(**debt)
 
 
 @mcp.tool
-def get_debt_item(debt_id: int) -> Optional[dict]:
+def get_debt_item(debt_id: int) -> Optional[DebtItem]:
     """Get a debt item by ID.
 
     Args:
@@ -269,7 +290,10 @@ def get_debt_item(debt_id: int) -> Optional[dict]:
     Returns:
         The debt item details or None if not found
     """
-    return debt_items.get(debt_id)
+    debt = debt_items.get(debt_id)
+    if debt is None:
+        return None
+    return DebtItem(**debt)
 
 
 @mcp.tool
@@ -280,7 +304,7 @@ def list_debt_items(
     component: Optional[str] = None,
     assigned_to: Optional[str] = None,
     limit: int = 50,
-) -> list[dict]:
+) -> list[DebtItem]:
     """List debt items with optional filters.
 
     Args:
@@ -317,7 +341,7 @@ def list_debt_items(
     }
     result.sort(key=lambda d: priority_order.get(d.get("priority", "medium"), 2))
 
-    return result[:limit]
+    return [DebtItem(**d) for d in result[:limit]]
 
 
 @mcp.tool
@@ -331,7 +355,7 @@ def update_debt_item(
     status: Optional[str] = None,
     assigned_to: Optional[str] = None,
     tags: Optional[list[str]] = None,
-) -> Optional[dict]:
+) -> Optional[DebtItem]:
     """Update a debt item.
 
     Args:
@@ -370,7 +394,7 @@ def update_debt_item(
         debt["tags"] = tags
     debt["updated_at"] = datetime.now().isoformat()
     _save()
-    return debt
+    return DebtItem(**debt)
 
 
 @mcp.tool
@@ -378,7 +402,7 @@ def resolve_debt_item(
     debt_id: int,
     resolution: str,
     resolved_by: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[DebtItem]:
     """Mark a debt item as resolved.
 
     Args:
@@ -399,7 +423,7 @@ def resolve_debt_item(
     debt["resolution_date"] = datetime.now().isoformat()
     debt["updated_at"] = datetime.now().isoformat()
     _save()
-    return debt
+    return DebtItem(**debt)
 
 
 @mcp.tool
@@ -407,7 +431,7 @@ def accrue_interest(
     debt_id: int,
     hours: float,
     description: str,
-) -> Optional[dict]:
+) -> Optional[DebtItem]:
     """Record interest (extra work) accrued on a debt item.
 
     Args:
@@ -430,7 +454,7 @@ def accrue_interest(
     })
     debt["updated_at"] = datetime.now().isoformat()
     _save()
-    return debt
+    return DebtItem(**debt)
 
 
 @mcp.tool
@@ -462,7 +486,7 @@ def create_refactoring_task(
     benefits: Optional[list[str]] = None,
     risks: Optional[list[str]] = None,
     prerequisites: Optional[list[int]] = None,
-) -> dict:
+) -> RefactoringTask:
     """Create a refactoring task.
 
     Args:
@@ -499,11 +523,11 @@ def create_refactoring_task(
     }
     refactoring_tasks[task_id] = task
     _save()
-    return task
+    return RefactoringTask(**task)
 
 
 @mcp.tool
-def get_refactoring_task(task_id: int) -> Optional[dict]:
+def get_refactoring_task(task_id: int) -> Optional[RefactoringTask]:
     """Get a refactoring task by ID.
 
     Args:
@@ -512,7 +536,10 @@ def get_refactoring_task(task_id: int) -> Optional[dict]:
     Returns:
         The task details or None if not found
     """
-    return refactoring_tasks.get(task_id)
+    task = refactoring_tasks.get(task_id)
+    if task is None:
+        return None
+    return RefactoringTask(**task)
 
 
 @mcp.tool
@@ -520,7 +547,7 @@ def list_refactoring_tasks(
     status: Optional[str] = None,
     assigned_to: Optional[str] = None,
     limit: int = 50,
-) -> list[dict]:
+) -> list[RefactoringTask]:
     """List refactoring tasks with optional filters.
 
     Args:
@@ -539,7 +566,7 @@ def list_refactoring_tasks(
         result = [t for t in result if assigned_to.lower() in (t.get("assigned_to") or "").lower()]
 
     result.sort(key=lambda t: t.get("created_at", ""), reverse=True)
-    return result[:limit]
+    return [RefactoringTask(**t) for t in result[:limit]]
 
 
 @mcp.tool
@@ -550,7 +577,7 @@ def update_refactoring_task(
     status: Optional[str] = None,
     progress: Optional[int] = None,
     assigned_to: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[RefactoringTask]:
     """Update a refactoring task.
 
     Args:
@@ -585,7 +612,7 @@ def update_refactoring_task(
         task["assigned_to"] = assigned_to
     task["updated_at"] = datetime.now().isoformat()
     _save()
-    return task
+    return RefactoringTask(**task)
 
 
 @mcp.tool
@@ -593,7 +620,7 @@ def complete_refactoring_task(
     task_id: int,
     summary: str,
     completed_by: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[RefactoringTask]:
     """Mark a refactoring task as completed.
 
     Args:
@@ -623,7 +650,7 @@ def complete_refactoring_task(
             debt_items[debt_id]["resolution_date"] = datetime.now().isoformat()
 
     _save()
-    return task
+    return RefactoringTask(**task)
 
 
 @mcp.tool
@@ -653,7 +680,7 @@ def record_quality_metric(
     component: Optional[str] = None,
     threshold: Optional[float] = None,
     notes: Optional[str] = None,
-) -> dict:
+) -> QualityMetric:
     """Record a code quality metric.
 
     Args:
@@ -681,11 +708,11 @@ def record_quality_metric(
     }
     quality_metrics[metric_id] = metric
     _save()
-    return metric
+    return QualityMetric(**metric)
 
 
 @mcp.tool
-def get_quality_metric(metric_id: int) -> Optional[dict]:
+def get_quality_metric(metric_id: int) -> Optional[QualityMetric]:
     """Get a quality metric by ID.
 
     Args:
@@ -694,7 +721,10 @@ def get_quality_metric(metric_id: int) -> Optional[dict]:
     Returns:
         The metric details or None if not found
     """
-    return quality_metrics.get(metric_id)
+    metric = quality_metrics.get(metric_id)
+    if metric is None:
+        return None
+    return QualityMetric(**metric)
 
 
 @mcp.tool
@@ -702,7 +732,7 @@ def list_quality_metrics(
     name: Optional[str] = None,
     component: Optional[str] = None,
     limit: int = 50,
-) -> list[dict]:
+) -> list[QualityMetric]:
     """List quality metrics with optional filters.
 
     Args:
@@ -721,7 +751,7 @@ def list_quality_metrics(
         result = [m for m in result if component.lower() in (m.get("component") or "").lower()]
 
     result.sort(key=lambda m: m.get("created_at", ""), reverse=True)
-    return result[:limit]
+    return [QualityMetric(**m) for m in result[:limit]]
 
 
 @mcp.tool
@@ -729,7 +759,7 @@ def get_metric_history(
     name: str,
     component: Optional[str] = None,
     limit: int = 20,
-) -> list[dict]:
+) -> list[QualityMetric]:
     """Get historical values for a specific metric.
 
     Args:
@@ -746,7 +776,7 @@ def get_metric_history(
         result = [m for m in result if m.get("component") == component]
 
     result.sort(key=lambda m: m.get("created_at", ""), reverse=True)
-    return result[:limit]
+    return [QualityMetric(**m) for m in result[:limit]]
 
 
 @mcp.tool
@@ -772,7 +802,7 @@ def delete_quality_metric(metric_id: int) -> bool:
 def create_debt_snapshot(
     name: str,
     description: Optional[str] = None,
-) -> dict:
+) -> DebtSnapshot:
     """Create a snapshot of current technical debt state.
 
     Args:
@@ -818,11 +848,11 @@ def create_debt_snapshot(
     }
     debt_snapshots[snapshot_id] = snapshot
     _save()
-    return snapshot
+    return DebtSnapshot(**snapshot)
 
 
 @mcp.tool
-def get_debt_snapshot(snapshot_id: int) -> Optional[dict]:
+def get_debt_snapshot(snapshot_id: int) -> Optional[DebtSnapshot]:
     """Get a debt snapshot by ID.
 
     Args:
@@ -831,11 +861,14 @@ def get_debt_snapshot(snapshot_id: int) -> Optional[dict]:
     Returns:
         The snapshot details or None if not found
     """
-    return debt_snapshots.get(snapshot_id)
+    snapshot = debt_snapshots.get(snapshot_id)
+    if snapshot is None:
+        return None
+    return DebtSnapshot(**snapshot)
 
 
 @mcp.tool
-def list_debt_snapshots(limit: int = 20) -> list[dict]:
+def list_debt_snapshots(limit: int = 20) -> list[DebtSnapshot]:
     """List all debt snapshots.
 
     Args:
@@ -846,7 +879,7 @@ def list_debt_snapshots(limit: int = 20) -> list[dict]:
     """
     result = list(debt_snapshots.values())
     result.sort(key=lambda s: s.get("timestamp", ""), reverse=True)
-    return result[:limit]
+    return [DebtSnapshot(**s) for s in result[:limit]]
 
 
 @mcp.tool
@@ -981,7 +1014,7 @@ def get_debt_summary() -> dict:
 
 
 @mcp.tool
-def get_priority_items(limit: int = 10) -> list[dict]:
+def get_priority_items(limit: int = 10) -> list[DebtItem]:
     """Get highest priority debt items that need attention.
 
     Args:
@@ -1018,11 +1051,11 @@ def get_priority_items(limit: int = 10) -> list[dict]:
         return pri + imp + interest
 
     active_debt.sort(key=urgency_score, reverse=True)
-    return active_debt[:limit]
+    return [DebtItem(**d) for d in active_debt[:limit]]
 
 
 @mcp.tool
-def search_debt_items(query: str) -> list[dict]:
+def search_debt_items(query: str) -> list[DebtItem]:
     """Search debt items by title, description, or component.
 
     Args:
@@ -1044,7 +1077,7 @@ def search_debt_items(query: str) -> list[dict]:
         ):
             results.append(debt)
 
-    return results[:20]
+    return [DebtItem(**d) for d in results[:20]]
 
 
 @mcp.tool

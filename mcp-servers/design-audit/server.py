@@ -61,9 +61,17 @@ class Audit(BaseModel):
     """A design audit session."""
     id: int
     name: str
+    project: Optional[str] = None
     description: Optional[str] = None
+    url: Optional[str] = None
+    auditor: Optional[str] = None
     scope: list[str] = []
+    wcag_level: Optional[str] = None
     status: str
+    issues: list[int] = []
+    accessibility_score: Optional[float] = None
+    completed_at: Optional[str] = None
+    notes: list[dict] = []
     created_at: str
     updated_at: str
 
@@ -72,51 +80,65 @@ class DesignIssue(BaseModel):
     """A design issue found in an audit."""
     id: int
     audit_id: Optional[int] = None
-    type: str
-    priority: str
-    title: str
-    description: str
-    component: Optional[str] = None
-    page_url: Optional[str] = None
+    page: Optional[str] = None
+    issue_type: str = ""
+    priority: str = "medium"
+    title: str = ""
+    description: str = ""
+    element_selector: Optional[str] = None
     screenshot_path: Optional[str] = None
-    status: str
-    created_at: str
-    updated_at: str
+    recommendation: Optional[str] = None
+    wcag_criterion: Optional[str] = None
+    status: str = "open"
+    assigned_to: Optional[str] = None
+    resolution: Optional[str] = None
+    resolved_by: Optional[str] = None
+    resolved_at: Optional[str] = None
+    created_at: str = ""
+    updated_at: str = ""
 
 
 class DesignSystem(BaseModel):
     """A design system reference."""
     id: int
     name: str
-    version: str
-    colors: dict = {}
+    brand: Optional[str] = None
+    description: Optional[str] = None
+    version: str = "1.0"
+    colors: list[dict] = []
     typography: dict = {}
     spacing: dict = {}
-    components: list = []
-    created_at: str
+    components: list[int] = []
+    created_at: str = ""
+    updated_at: Optional[str] = None
 
 
 class Component(BaseModel):
     """A UI component in the design system."""
     id: int
+    system_id: Optional[int] = None
     name: str
-    category: str
+    category: str = ""
     description: Optional[str] = None
-    properties: dict = {}
-    variants: list = []
-    created_at: str
+    variants: list[dict] = []
+    props: dict = {}
+    usage_notes: Optional[str] = None
+    created_at: str = ""
+    updated_at: Optional[str] = None
 
 
 class AccessibilityCheck(BaseModel):
     """An accessibility checklist item."""
     id: int
-    category: str
-    criterion: str
-    description: str
-    wcag_level: str
-    status: str
+    audit_id: Optional[int] = None
+    page: Optional[str] = None
+    criterion: str = ""
+    wcag_level: str = "AA"
+    status: str = "not_tested"
+    result: Optional[str] = None
     notes: Optional[str] = None
-    created_at: str
+    created_at: str = ""
+    updated_at: Optional[str] = None
 
 
 # Data persistence setup
@@ -225,7 +247,7 @@ def create_audit(
     auditor: Optional[str] = None,
     scope: Optional[list[str]] = None,
     wcag_level: str = WCAGLevel.AA.value,
-) -> dict:
+) -> Audit:
     """Create a new design audit session.
 
     Args:
@@ -257,11 +279,11 @@ def create_audit(
     }
     audits[audit_id] = audit
     _save()
-    return audit
+    return Audit(**audit)
 
 
 @mcp.tool
-def get_audit(audit_id: int) -> Optional[dict]:
+def get_audit(audit_id: int) -> Optional[Audit]:
     """Get an audit session by ID.
 
     Args:
@@ -270,7 +292,8 @@ def get_audit(audit_id: int) -> Optional[dict]:
     Returns:
         The audit details or None if not found
     """
-    return audits.get(audit_id)
+    audit = audits.get(audit_id)
+    return Audit(**audit) if audit else None
 
 
 @mcp.tool
@@ -279,7 +302,7 @@ def list_audits(
     project: Optional[str] = None,
     auditor: Optional[str] = None,
     limit: int = 50,
-) -> list[dict]:
+) -> list[Audit]:
     """List audit sessions with optional filters.
 
     Args:
@@ -301,7 +324,7 @@ def list_audits(
         result = [a for a in result if auditor.lower() in (a.get("auditor") or "").lower()]
 
     result.sort(key=lambda a: a.get("created_at", ""), reverse=True)
-    return result[:limit]
+    return [Audit(**a) for a in result[:limit]]
 
 
 @mcp.tool
@@ -310,7 +333,7 @@ def update_audit_status(
     status: str,
     accessibility_score: Optional[float] = None,
     notes: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[Audit]:
     """Update the status of an audit.
 
     Args:
@@ -342,7 +365,7 @@ def update_audit_status(
         })
 
     _save()
-    return audit
+    return Audit(**audit)
 
 
 @mcp.tool
@@ -376,7 +399,7 @@ def create_design_issue(
     screenshot_path: Optional[str] = None,
     recommendation: Optional[str] = None,
     wcag_criterion: Optional[str] = None,
-) -> dict:
+) -> DesignIssue:
     """Create a design audit issue.
 
     Args:
@@ -419,11 +442,11 @@ def create_design_issue(
         audits[audit_id]["updated_at"] = datetime.now().isoformat()
 
     _save()
-    return issue
+    return DesignIssue(**issue)
 
 
 @mcp.tool
-def get_design_issue(issue_id: int) -> Optional[dict]:
+def get_design_issue(issue_id: int) -> Optional[DesignIssue]:
     """Get a design issue by ID.
 
     Args:
@@ -432,7 +455,8 @@ def get_design_issue(issue_id: int) -> Optional[dict]:
     Returns:
         The issue details or None if not found
     """
-    return issues.get(issue_id)
+    issue = issues.get(issue_id)
+    return DesignIssue(**issue) if issue else None
 
 
 @mcp.tool
@@ -443,7 +467,7 @@ def list_design_issues(
     status: Optional[str] = None,
     page: Optional[str] = None,
     limit: int = 50,
-) -> list[dict]:
+) -> list[DesignIssue]:
     """List design issues with optional filters.
 
     Args:
@@ -471,7 +495,7 @@ def list_design_issues(
         result = [i for i in result if page.lower() in i.get("page", "").lower()]
 
     result.sort(key=lambda i: i.get("created_at", ""), reverse=True)
-    return result[:limit]
+    return [DesignIssue(**i) for i in result[:limit]]
 
 
 @mcp.tool
@@ -482,7 +506,7 @@ def update_design_issue(
     description: Optional[str] = None,
     recommendation: Optional[str] = None,
     assigned_to: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[DesignIssue]:
     """Update a design issue.
 
     Args:
@@ -512,7 +536,7 @@ def update_design_issue(
         issue["assigned_to"] = assigned_to
     issue["updated_at"] = datetime.now().isoformat()
     _save()
-    return issue
+    return DesignIssue(**issue)
 
 
 @mcp.tool
@@ -520,7 +544,7 @@ def resolve_design_issue(
     issue_id: int,
     resolution: str,
     resolved_by: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[DesignIssue]:
     """Mark a design issue as fixed.
 
     Args:
@@ -541,7 +565,7 @@ def resolve_design_issue(
     issue["resolved_at"] = datetime.now().isoformat()
     issue["updated_at"] = datetime.now().isoformat()
     _save()
-    return issue
+    return DesignIssue(**issue)
 
 
 @mcp.tool
@@ -577,7 +601,7 @@ def create_design_system(
     typography: Optional[dict] = None,
     spacing: Optional[dict] = None,
     description: Optional[str] = None,
-) -> dict:
+) -> DesignSystem:
     """Create a design system definition.
 
     Args:
@@ -606,11 +630,11 @@ def create_design_system(
     }
     design_systems[system_id] = system
     _save()
-    return system
+    return DesignSystem(**system)
 
 
 @mcp.tool
-def get_design_system(system_id: int) -> Optional[dict]:
+def get_design_system(system_id: int) -> Optional[DesignSystem]:
     """Get a design system by ID.
 
     Args:
@@ -619,11 +643,12 @@ def get_design_system(system_id: int) -> Optional[dict]:
     Returns:
         The design system details or None if not found
     """
-    return design_systems.get(system_id)
+    system = design_systems.get(system_id)
+    return DesignSystem(**system) if system else None
 
 
 @mcp.tool
-def list_design_systems(limit: int = 50) -> list[dict]:
+def list_design_systems(limit: int = 50) -> list[DesignSystem]:
     """List all design systems.
 
     Args:
@@ -634,7 +659,7 @@ def list_design_systems(limit: int = 50) -> list[dict]:
     """
     result = list(design_systems.values())
     result.sort(key=lambda s: s.get("name", ""))
-    return result[:limit]
+    return [DesignSystem(**s) for s in result[:limit]]
 
 
 @mcp.tool
@@ -644,7 +669,7 @@ def update_design_system(
     colors: Optional[list[dict]] = None,
     typography: Optional[dict] = None,
     spacing: Optional[dict] = None,
-) -> Optional[dict]:
+) -> Optional[DesignSystem]:
     """Update a design system.
 
     Args:
@@ -671,7 +696,7 @@ def update_design_system(
         system["spacing"] = spacing
     system["updated_at"] = datetime.now().isoformat()
     _save()
-    return system
+    return DesignSystem(**system)
 
 
 @mcp.tool
@@ -680,7 +705,7 @@ def add_color_to_system(
     name: str,
     hex_value: str,
     usage: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[DesignSystem]:
     """Add a color to a design system.
 
     Args:
@@ -704,7 +729,7 @@ def add_color_to_system(
     system.setdefault("colors", []).append(color)
     system["updated_at"] = datetime.now().isoformat()
     _save()
-    return system
+    return DesignSystem(**system)
 
 
 @mcp.tool
@@ -735,7 +760,7 @@ def create_component(
     variants: Optional[list[dict]] = None,
     props: Optional[dict] = None,
     usage_notes: Optional[str] = None,
-) -> dict:
+) -> Component:
     """Create a design system component.
 
     Args:
@@ -771,11 +796,11 @@ def create_component(
         design_systems[system_id]["updated_at"] = datetime.now().isoformat()
 
     _save()
-    return component
+    return Component(**component)
 
 
 @mcp.tool
-def get_component(component_id: int) -> Optional[dict]:
+def get_component(component_id: int) -> Optional[Component]:
     """Get a component by ID.
 
     Args:
@@ -784,7 +809,8 @@ def get_component(component_id: int) -> Optional[dict]:
     Returns:
         The component details or None if not found
     """
-    return components.get(component_id)
+    component = components.get(component_id)
+    return Component(**component) if component else None
 
 
 @mcp.tool
@@ -792,7 +818,7 @@ def list_components(
     system_id: Optional[int] = None,
     category: Optional[str] = None,
     limit: int = 50,
-) -> list[dict]:
+) -> list[Component]:
     """List components with optional filters.
 
     Args:
@@ -811,7 +837,7 @@ def list_components(
         result = [c for c in result if c.get("category") == category]
 
     result.sort(key=lambda c: c.get("name", ""))
-    return result[:limit]
+    return [Component(**c) for c in result[:limit]]
 
 
 @mcp.tool
@@ -822,7 +848,7 @@ def update_component(
     variants: Optional[list[dict]] = None,
     props: Optional[dict] = None,
     usage_notes: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[Component]:
     """Update a component.
 
     Args:
@@ -852,7 +878,7 @@ def update_component(
         component["usage_notes"] = usage_notes
     component["updated_at"] = datetime.now().isoformat()
     _save()
-    return component
+    return Component(**component)
 
 
 @mcp.tool
@@ -889,7 +915,7 @@ def create_accessibility_check(
     status: str = "not_tested",
     result: Optional[str] = None,
     notes: Optional[str] = None,
-) -> dict:
+) -> AccessibilityCheck:
     """Create an accessibility compliance check.
 
     Args:
@@ -924,11 +950,11 @@ def create_accessibility_check(
         audits[audit_id].setdefault("accessibility_checks", []).append(check_id)
 
     _save()
-    return check
+    return AccessibilityCheck(**check)
 
 
 @mcp.tool
-def get_accessibility_check(check_id: int) -> Optional[dict]:
+def get_accessibility_check(check_id: int) -> Optional[AccessibilityCheck]:
     """Get an accessibility check by ID.
 
     Args:
@@ -937,7 +963,8 @@ def get_accessibility_check(check_id: int) -> Optional[dict]:
     Returns:
         The check details or None if not found
     """
-    return accessibility_checks.get(check_id)
+    check = accessibility_checks.get(check_id)
+    return AccessibilityCheck(**check) if check else None
 
 
 @mcp.tool
@@ -946,7 +973,7 @@ def list_accessibility_checks(
     wcag_level: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 100,
-) -> list[dict]:
+) -> list[AccessibilityCheck]:
     """List accessibility checks with optional filters.
 
     Args:
@@ -968,7 +995,7 @@ def list_accessibility_checks(
         result = [c for c in result if c.get("status") == status]
 
     result.sort(key=lambda c: (c.get("wcag_level", ""), c.get("criterion", "")))
-    return result[:limit]
+    return [AccessibilityCheck(**c) for c in result[:limit]]
 
 
 @mcp.tool
@@ -977,7 +1004,7 @@ def update_accessibility_check(
     status: Optional[str] = None,
     result: Optional[str] = None,
     notes: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[AccessibilityCheck]:
     """Update an accessibility check.
 
     Args:
@@ -1001,7 +1028,7 @@ def update_accessibility_check(
         check["notes"] = notes
     check["updated_at"] = datetime.now().isoformat()
     _save()
-    return check
+    return AccessibilityCheck(**check)
 
 
 @mcp.tool
@@ -1146,7 +1173,7 @@ def get_overall_design_stats() -> dict:
 
 
 @mcp.tool
-def search_design_issues(query: str) -> list[dict]:
+def search_design_issues(query: str) -> list[DesignIssue]:
     """Search design issues by title, description, or page.
 
     Args:
@@ -1167,7 +1194,7 @@ def search_design_issues(query: str) -> list[dict]:
         ):
             results.append(issue)
 
-    return results[:20]
+    return [DesignIssue(**i) for i in results[:20]]
 
 
 # === RESOURCES ===

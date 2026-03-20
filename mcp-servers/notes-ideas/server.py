@@ -26,6 +26,12 @@ class Folder(BaseModel):
     created_at: str
 
 
+class Tag(BaseModel):
+    """A tag with usage count."""
+    tag: str
+    count: int
+
+
 class Note(BaseModel):
     """A note or idea."""
     id: int
@@ -416,7 +422,7 @@ def get_notes_by_tag(tag: str, include_archived: bool = False) -> list[Note]:
 
 
 @mcp.tool
-def get_all_tags() -> list[dict]:
+def get_all_tags() -> list[Tag]:
     """Get all tags with usage counts.
 
     Returns:
@@ -429,7 +435,7 @@ def get_all_tags() -> list[dict]:
             tag_counts[tag_lower] = tag_counts.get(tag_lower, 0) + 1
 
     return [
-        {"tag": tag, "count": count}
+        Tag(tag=tag, count=count)
         for tag, count in sorted(tag_counts.items(), key=lambda x: (-x[1], x[0]))
     ]
 

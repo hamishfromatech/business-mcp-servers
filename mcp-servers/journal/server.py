@@ -28,6 +28,43 @@ class Entry(BaseModel):
     created_at: str
     updated_at: str
 
+
+class Tag(BaseModel):
+    """A tag with usage count."""
+    tag: str
+    count: int
+
+
+class MoodSummary(BaseModel):
+    """Mood distribution summary."""
+    total_entries: int
+    mood_distribution: dict[str, int]
+    entries_with_mood: int
+
+
+class CalendarDay(BaseModel):
+    """A day in the entry calendar."""
+    date: str
+    entry_count: int
+    moods: list[str]
+
+
+class EntryCalendar(BaseModel):
+    """Calendar view of entries for a month."""
+    year: int
+    month: int
+    calendar: dict[int, CalendarDay]
+    total_entries: int
+
+
+class WritingStats(BaseModel):
+    """Writing statistics."""
+    total_entries: int
+    total_words: int
+    average_words: int
+    total_tags: int
+    entries_this_month: int
+
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
 DATA_FILE = DATA_DIR / "journal.json"
@@ -301,21 +338,21 @@ def get_entries_by_mood(mood: str) -> list[Entry]:
 
 
 @mcp.tool
-def get_all_tags() -> list[dict]:
+def get_all_tags() -> list[Tag]:
     """Get all tags with their usage counts.
 
     Returns:
         List of tags with counts
     """
     return [
-        {"tag": tag, "count": count}
+        Tag(tag=tag, count=count)
         for tag, count in sorted(tags.items(), key=lambda x: (-x[1], x[0]))
     ]
 
 
 # Analytics
 @mcp.tool
-def get_mood_summary(start_date: Optional[str] = None, end_date: Optional[str] = None) -> dict:
+def get_mood_summary(start_date: Optional[str] = None, end_date: Optional[str] = None) -> MoodSummary:
     """Get a summary of moods over a period.
 
     Args:
@@ -338,15 +375,15 @@ def get_mood_summary(start_date: Optional[str] = None, end_date: Optional[str] =
         if mood:
             mood_counts[mood] = mood_counts.get(mood, 0) + 1
 
-    return {
-        "total_entries": len(result),
-        "mood_distribution": mood_counts,
-        "entries_with_mood": sum(mood_counts.values())
-    }
+    return MoodSummary(
+        total_entries=len(result),
+        mood_distribution=mood_counts,
+        entries_with_mood=sum(mood_counts.values())
+    )
 
 
 @mcp.tool
-def get_entry_calendar(year: int, month: int) -> dict:
+def get_entry_calendar(year: int, month: int) -> EntryCalendar:
     """Get a calendar view of entries for a month.
 
     Args:
@@ -359,52 +396,52 @@ def get_entry_calendar(year: int, month: int) -> dict:
     from calendar import monthrange
 
     days_in_month = monthrange(year, month)[1]
-    calendar = {}
+    calendar: dict[int, CalendarDay] = {}
 
     for day in range(1, days_in_month + 1):
         date_str = f"{year:04d}-{month:02d}-{day:02d}"
         day_entries = [e for e in entries.values() if e["date"] == date_str]
-        calendar[day] = {
-            "date": date_str,
-            "entry_count": len(day_entries),
-            "moods": [e.get("mood") for e in day_entries if e.get("mood")]
-        }
+        calendar[day] = CalendarDay(
+            date=date_str,
+            entry_count=len(day_entries),
+            moods=[e.get("mood") for e in day_entries if e.get("mood")]
+        )
 
-    return {
-        "year": year,
-        "month": month,
-        "calendar": calendar,
-        "total_entries": sum(d["entry_count"] for d in calendar.values())
-    }
+    return EntryCalendar(
+        year=year,
+        month=month,
+        calendar=calendar,
+        total_entries=sum(d.entry_count for d in calendar.values())
+    )
 
 
 @mcp.tool
-def get_writing_stats() -> dict:
+def get_writing_stats() -> WritingStats:
     """Get writing statistics.
 
     Returns:
         Statistics about journal entries
     """
     if not entries:
-        return {
-            "total_entries": 0,
-            "total_words": 0,
-            "average_words": 0,
-            "total_tags": 0,
-            "entries_this_month": 0
-        }
+        return WritingStats(
+            total_entries=0,
+            total_words=0,
+            average_words=0,
+            total_tags=0,
+            entries_this_month=0
+        )
 
     total_words = sum(len(e["content"].split()) for e in entries.values())
     this_month = datetime.now().strftime("%Y-%m")
     entries_this_month = len([e for e in entries.values() if e["date"].startswith(this_month)])
 
-    return {
-        "total_entries": len(entries),
-        "total_words": total_words,
-        "average_words": total_words // len(entries),
-        "total_tags": len(tags),
-        "entries_this_month": entries_this_month
-    }
+    return WritingStats(
+        total_entries=len(entries),
+        total_words=total_words,
+        average_words=total_words // len(entries),
+        total_tags=len(tags),
+        entries_this_month=entries_this_month
+    )
 
 
 # Resources
@@ -460,7 +497,7 @@ def get_tags_resource() -> str:
 
     lines = ["# Tags\n"]
     for tag_info in all_tags:
-        lines.append(f"- **#{tag_info['tag']}** ({tag_info['count']} entries)")
+        lines.append(f"- **#{tag_info.tag}** ({tag_info.count} entries)")
 
     return "\n".join(lines)
 

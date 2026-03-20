@@ -352,7 +352,7 @@ def remove_attendee_from_meeting(meeting_id: int, attendee_id: int) -> Optional[
 
 # Agenda Management
 @mcp.tool
-def set_agenda(meeting_id: int, agenda_items: list[str]) -> Optional[dict]:
+def set_agenda(meeting_id: int, agenda_items: list[str]) -> Optional[Meeting]:
     """Set the agenda for a meeting.
 
     Args:
@@ -369,11 +369,11 @@ def set_agenda(meeting_id: int, agenda_items: list[str]) -> Optional[dict]:
     meeting["agenda"] = [{"item": item, "completed": False} for item in agenda_items]
     meeting["updated_at"] = datetime.now().isoformat()
     _save()
-    return meeting
+    return Meeting(**meeting)
 
 
 @mcp.tool
-def add_agenda_item(meeting_id: int, item: str) -> Optional[dict]:
+def add_agenda_item(meeting_id: int, item: str) -> Optional[Meeting]:
     """Add an agenda item to a meeting.
 
     Args:
@@ -390,12 +390,12 @@ def add_agenda_item(meeting_id: int, item: str) -> Optional[dict]:
     meeting["agenda"].append({"item": item, "completed": False})
     meeting["updated_at"] = datetime.now().isoformat()
     _save()
-    return meeting
+    return Meeting(**meeting)
 
 
 # Notes Management
 @mcp.tool
-def set_meeting_notes(meeting_id: int, notes: str) -> Optional[dict]:
+def set_meeting_notes(meeting_id: int, notes: str) -> Optional[Meeting]:
     """Set the notes for a meeting.
 
     Args:
@@ -412,11 +412,11 @@ def set_meeting_notes(meeting_id: int, notes: str) -> Optional[dict]:
     meeting["notes"] = notes
     meeting["updated_at"] = datetime.now().isoformat()
     _save()
-    return meeting
+    return Meeting(**meeting)
 
 
 @mcp.tool
-def append_meeting_notes(meeting_id: int, notes: str) -> Optional[dict]:
+def append_meeting_notes(meeting_id: int, notes: str) -> Optional[Meeting]:
     """Append notes to a meeting.
 
     Args:
@@ -436,7 +436,7 @@ def append_meeting_notes(meeting_id: int, notes: str) -> Optional[dict]:
         meeting["notes"] = notes
     meeting["updated_at"] = datetime.now().isoformat()
     _save()
-    return meeting
+    return Meeting(**meeting)
 
 
 # Action Items

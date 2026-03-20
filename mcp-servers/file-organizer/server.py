@@ -28,6 +28,29 @@ class OrganizationRule(BaseModel):
     file_types: list[str] = []
     created_at: str
 
+
+class FileInfo(BaseModel):
+    """Information about a file."""
+    path: str
+    name: str
+    extension: str
+    size: int
+    modified: str
+
+
+class DuplicateFile(BaseModel):
+    """A file within a duplicate group."""
+    path: str
+    size: int
+    modified: str
+
+
+class DuplicateGroup(BaseModel):
+    """A group of duplicate files."""
+    hash: str
+    size_bytes: int
+    files: list[DuplicateFile]
+
 # Data persistence setup
 DATA_DIR = Path(__file__).parent / "data"
 DATA_FILE = DATA_DIR / "organizer.json"
@@ -207,7 +230,7 @@ def categorize_file(filepath: str) -> dict:
 
 
 @mcp.tool
-def list_files_by_category(directory: str, category: str) -> list[dict]:
+def list_files_by_category(directory: str, category: str) -> list[FileInfo]:
     """List all files in a directory that belong to a category.
 
     Args:
@@ -229,13 +252,13 @@ def list_files_by_category(directory: str, category: str) -> list[dict]:
             ext = filepath.suffix.lower()
             if ext in extensions:
                 stat = filepath.stat()
-                files.append({
-                    "path": str(filepath),
-                    "name": filepath.name,
-                    "extension": ext,
-                    "size": stat.st_size,
-                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat()
-                })
+                files.append(FileInfo(
+                    path=str(filepath),
+                    name=filepath.name,
+                    extension=ext,
+                    size=stat.st_size,
+                    modified=datetime.fromtimestamp(stat.st_mtime).isoformat()
+                ))
 
     return files
 
@@ -370,7 +393,7 @@ def organize_directory(
 
 
 @mcp.tool
-def find_duplicates(directory: str) -> list[dict]:
+def find_duplicates(directory: str) -> list[DuplicateGroup]:
     """Find duplicate files in a directory.
 
     Args:
@@ -383,18 +406,18 @@ def find_duplicates(directory: str) -> list[dict]:
     if not path.exists():
         raise ValueError(f"Directory does not exist: {directory}")
 
-    file_hashes: dict[str, list[dict]] = {}
+    file_hashes: dict[str, list[DuplicateFile]] = {}
 
     for filepath in path.glob("**/*"):
         if filepath.is_file():
             try:
                 file_hash = _get_file_hash(str(filepath))
                 stat = filepath.stat()
-                file_info = {
-                    "path": str(filepath),
-                    "size": stat.st_size,
-                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat()
-                }
+                file_info = DuplicateFile(
+                    path=str(filepath),
+                    size=stat.st_size,
+                    modified=datetime.fromtimestamp(stat.st_mtime).isoformat()
+                )
 
                 if file_hash in file_hashes:
                     file_hashes[file_hash].append(file_info)
@@ -404,11 +427,11 @@ def find_duplicates(directory: str) -> list[dict]:
                 pass
 
     return [
-        {
-            "hash": h,
-            "size_bytes": files[0]["size"],
-            "files": files
-        }
+        DuplicateGroup(
+            hash=h,
+            size_bytes=files[0].size,
+            files=files
+        )
         for h, files in file_hashes.items()
         if len(files) > 1
     ]

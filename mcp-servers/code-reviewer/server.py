@@ -55,9 +55,12 @@ class Review(BaseModel):
     id: int
     title: str
     description: Optional[str] = None
+    repository: Optional[str] = None
+    branch: Optional[str] = None
     files: list[str] = []
     status: str
     reviewer: Optional[str] = None
+    issues: list[int] = []
     created_at: str
     updated_at: str
 
@@ -67,12 +70,19 @@ class Issue(BaseModel):
     id: int
     review_id: Optional[int] = None
     file_path: Optional[str] = None
-    line_number: Optional[int] = None
+    line_start: Optional[int] = None
+    line_end: Optional[int] = None
     category: str
     severity: str
+    title: str = ""
     description: str
     suggestion: Optional[str] = None
+    code_snippet: Optional[str] = None
     status: str
+    resolution: Optional[str] = None
+    resolved_by: Optional[str] = None
+    resolved_at: Optional[str] = None
+    resolution_notes: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -83,8 +93,11 @@ class Standard(BaseModel):
     name: str
     category: str
     description: str
-    examples: list[str] = []
+    rules: list[str] = []
+    examples: list[dict] = []
+    references: list[str] = []
     created_at: str
+    updated_at: Optional[str] = None
 
 
 # Data persistence setup
@@ -167,7 +180,7 @@ def create_review(
     reviewer: Optional[str] = None,
     description: Optional[str] = None,
     files: Optional[list[str]] = None,
-) -> dict:
+) -> Review:
     """Create a new code review session.
 
     Args:
@@ -197,11 +210,11 @@ def create_review(
     }
     reviews[review_id] = review
     _save()
-    return review
+    return Review(**review)
 
 
 @mcp.tool
-def get_review(review_id: int) -> Optional[dict]:
+def get_review(review_id: int) -> Optional[Review]:
     """Get a review session by ID.
 
     Args:
@@ -210,7 +223,8 @@ def get_review(review_id: int) -> Optional[dict]:
     Returns:
         The review details or None if not found
     """
-    return reviews.get(review_id)
+    review = reviews.get(review_id)
+    return Review(**review) if review else None
 
 
 @mcp.tool
@@ -219,7 +233,7 @@ def list_reviews(
     reviewer: Optional[str] = None,
     repository: Optional[str] = None,
     limit: int = 50,
-) -> list[dict]:
+) -> list[Review]:
     """List review sessions with optional filters.
 
     Args:
@@ -241,7 +255,7 @@ def list_reviews(
         result = [r for r in result if repository.lower() in r.get("repository", "").lower()]
 
     result.sort(key=lambda r: r.get("created_at", ""), reverse=True)
-    return result[:limit]
+    return [Review(**r) for r in result[:limit]]
 
 
 @mcp.tool
@@ -249,7 +263,7 @@ def update_review_status(
     review_id: int,
     status: str,
     notes: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[Review]:
     """Update the status of a review session.
 
     Args:
@@ -273,14 +287,14 @@ def update_review_status(
             "timestamp": datetime.now().isoformat(),
         })
     _save()
-    return review
+    return Review(**review)
 
 
 @mcp.tool
 def add_files_to_review(
     review_id: int,
     files: list[str],
-) -> Optional[dict]:
+) -> Optional[Review]:
     """Add files to a review session.
 
     Args:
@@ -298,7 +312,7 @@ def add_files_to_review(
     review["files"] = list(existing_files.union(set(files)))
     review["updated_at"] = datetime.now().isoformat()
     _save()
-    return review
+    return Review(**review)
 
 
 @mcp.tool
@@ -332,7 +346,7 @@ def create_issue(
     description: str = "",
     suggestion: Optional[str] = None,
     code_snippet: Optional[str] = None,
-) -> dict:
+) -> Issue:
     """Create a code review issue.
 
     Args:
@@ -375,11 +389,11 @@ def create_issue(
         reviews[review_id]["updated_at"] = datetime.now().isoformat()
 
     _save()
-    return issue
+    return Issue(**issue)
 
 
 @mcp.tool
-def get_issue(issue_id: int) -> Optional[dict]:
+def get_issue(issue_id: int) -> Optional[Issue]:
     """Get an issue by ID.
 
     Args:
@@ -388,7 +402,8 @@ def get_issue(issue_id: int) -> Optional[dict]:
     Returns:
         The issue details or None if not found
     """
-    return issues.get(issue_id)
+    issue = issues.get(issue_id)
+    return Issue(**issue) if issue else None
 
 
 @mcp.tool
@@ -399,7 +414,7 @@ def list_issues(
     review_id: Optional[int] = None,
     file_path: Optional[str] = None,
     limit: int = 50,
-) -> list[dict]:
+) -> list[Issue]:
     """List issues with optional filters.
 
     Args:
@@ -427,7 +442,7 @@ def list_issues(
         result = [i for i in result if file_path.lower() in i.get("file_path", "").lower()]
 
     result.sort(key=lambda i: i.get("created_at", ""), reverse=True)
-    return result[:limit]
+    return [Issue(**i) for i in result[:limit]]
 
 
 @mcp.tool
@@ -438,7 +453,7 @@ def update_issue(
     description: Optional[str] = None,
     suggestion: Optional[str] = None,
     resolution_notes: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[Issue]:
     """Update an issue.
 
     Args:
@@ -468,7 +483,7 @@ def update_issue(
         issue["resolution_notes"] = resolution_notes
     issue["updated_at"] = datetime.now().isoformat()
     _save()
-    return issue
+    return Issue(**issue)
 
 
 @mcp.tool
@@ -476,7 +491,7 @@ def resolve_issue(
     issue_id: int,
     resolution: str,
     resolved_by: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[Issue]:
     """Mark an issue as resolved.
 
     Args:
@@ -497,7 +512,7 @@ def resolve_issue(
     issue["resolved_at"] = datetime.now().isoformat()
     issue["updated_at"] = datetime.now().isoformat()
     _save()
-    return issue
+    return Issue(**issue)
 
 
 @mcp.tool
@@ -535,7 +550,7 @@ def create_standard(
     rules: list[str],
     examples: Optional[list[dict]] = None,
     references: Optional[list[str]] = None,
-) -> dict:
+) -> Standard:
     """Create a code quality standard.
 
     Args:
@@ -563,11 +578,11 @@ def create_standard(
     }
     standards[standard_id] = standard
     _save()
-    return standard
+    return Standard(**standard)
 
 
 @mcp.tool
-def get_standard(standard_id: int) -> Optional[dict]:
+def get_standard(standard_id: int) -> Optional[Standard]:
     """Get a code standard by ID.
 
     Args:
@@ -576,14 +591,15 @@ def get_standard(standard_id: int) -> Optional[dict]:
     Returns:
         The standard details or None if not found
     """
-    return standards.get(standard_id)
+    standard = standards.get(standard_id)
+    return Standard(**standard) if standard else None
 
 
 @mcp.tool
 def list_standards(
     category: Optional[str] = None,
     limit: int = 50,
-) -> list[dict]:
+) -> list[Standard]:
     """List code standards with optional filters.
 
     Args:
@@ -599,7 +615,7 @@ def list_standards(
         result = [s for s in result if s.get("category") == category]
 
     result.sort(key=lambda s: s.get("name", ""))
-    return result[:limit]
+    return [Standard(**s) for s in result[:limit]]
 
 
 @mcp.tool
@@ -609,7 +625,7 @@ def update_standard(
     description: Optional[str] = None,
     rules: Optional[list[str]] = None,
     examples: Optional[list[dict]] = None,
-) -> Optional[dict]:
+) -> Optional[Standard]:
     """Update a code standard.
 
     Args:
@@ -636,7 +652,7 @@ def update_standard(
         standard["examples"] = examples
     standard["updated_at"] = datetime.now().isoformat()
     _save()
-    return standard
+    return Standard(**standard)
 
 
 @mcp.tool
@@ -744,7 +760,7 @@ def get_overall_stats() -> dict:
 
 
 @mcp.tool
-def search_issues(query: str) -> list[dict]:
+def search_issues(query: str) -> list[Issue]:
     """Search issues by title, description, or file path.
 
     Args:
@@ -765,7 +781,7 @@ def search_issues(query: str) -> list[dict]:
         ):
             results.append(issue)
 
-    return results[:20]
+    return [Issue(**i) for i in results[:20]]
 
 
 # === RESOURCES ===
