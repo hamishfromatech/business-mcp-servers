@@ -31,7 +31,6 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 import urllib.parse
 
 from fastmcp import FastMCP
-from fastmcp.server.apps import AppConfig
 
 from models import Board, Task, TaskStatus, TaskPriority, CreateTaskInput, UpdateTaskInput, CreateBoardInput
 from storage import KanbanStorage

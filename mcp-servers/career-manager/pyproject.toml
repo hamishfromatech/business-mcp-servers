@@ -5,7 +5,7 @@ description = "All-in-one career management MCP server with tools for resume, in
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "fastmcp>=0.1.0",
+    "fastmcp>=3.1.0",
 ]
 
 [project.optional-dependencies]
