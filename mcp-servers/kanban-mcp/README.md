@@ -255,3 +255,11 @@ Access the UI through the `open_kanban_ui` tool or via the `ui://kanban/board` r
 ## License
 
 MIT
+---
+
+## Feedback & Community
+
+Found this MCP server genuinely useful? I'd love to hear from you.
+
+- **Email**: [hamish@atech.industries](mailto:hamish@atech.industries)
+- **Join our free Open Source AI Builders Club on Skool**: [https://www.skool.com/open-source-ai-builders-club/about?ref=da946a67c5c646e991b96ea9ce7ad9e4](https://www.skool.com/open-source-ai-builders-club/about?ref=da946a67c5c646e991b96ea9ce7ad9e4)
