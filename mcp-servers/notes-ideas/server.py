@@ -4,12 +4,32 @@ A FastMCP server for capturing and organizing notes and ideas.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 from pathlib import Path
 import json
 import re
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
 from fastmcp import FastMCP
+
+# --- tolerate JSON-stringified list params from some MCP clients ---------------
+# A few MCP client harnesses serialize Optional[list[...]] tool params as JSON
+# strings. BeforeValidator runs before pydantic validates the list type, so we
+# parse strings back into real lists while passing arrays through untouched.
+def _coerce_json_list(value):
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else [parsed]
+        except (json.JSONDecodeError, TypeError):
+            return [value]
+    return value
+
+
+StrList = Annotated[list[str], BeforeValidator(_coerce_json_list)]
+IntList = Annotated[list[int], BeforeValidator(_coerce_json_list)]
+DictList = Annotated[list[dict], BeforeValidator(_coerce_json_list)]
+# ------------------------------------------------------------------------------
+
 
 mcp = FastMCP(
     name="Notes & Ideas",
@@ -172,7 +192,7 @@ def create_note(
     title: str,
     content: str,
     folder_id: Optional[int] = None,
-    tags: Optional[list[str]] = None,
+    tags: Optional[StrList] = None,
     is_idea: bool = False,
     priority: Optional[str] = None
 ) -> Note:
@@ -231,7 +251,7 @@ def update_note(
     title: Optional[str] = None,
     content: Optional[str] = None,
     folder_id: Optional[int] = None,
-    tags: Optional[list[str]] = None,
+    tags: Optional[StrList] = None,
     is_idea: Optional[bool] = None,
     priority: Optional[str] = None,
     pinned: Optional[bool] = None,
@@ -339,7 +359,7 @@ def quick_note(content: str, folder_id: Optional[int] = None) -> Note:
 def search_notes(
     query: str,
     folder_id: Optional[int] = None,
-    tags: Optional[list[str]] = None,
+    tags: Optional[StrList] = None,
     is_idea: Optional[bool] = None,
     include_archived: bool = False
 ) -> list[Note]:

@@ -4,12 +4,32 @@ A FastMCP server for auditing web designs, tracking UI/UX issues, managing desig
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 from pathlib import Path
 import json
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
 from fastmcp import FastMCP
+
+# --- tolerate JSON-stringified list params from some MCP clients ---------------
+# A few MCP client harnesses serialize Optional[list[...]] tool params as JSON
+# strings. BeforeValidator runs before pydantic validates the list type, so we
+# parse strings back into real lists while passing arrays through untouched.
+def _coerce_json_list(value):
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else [parsed]
+        except (json.JSONDecodeError, TypeError):
+            return [value]
+    return value
+
+
+StrList = Annotated[list[str], BeforeValidator(_coerce_json_list)]
+IntList = Annotated[list[int], BeforeValidator(_coerce_json_list)]
+DictList = Annotated[list[dict], BeforeValidator(_coerce_json_list)]
+# ------------------------------------------------------------------------------
+
 
 mcp = FastMCP(
     name="Design Audit",
@@ -245,7 +265,7 @@ def create_audit(
     project: str,
     url: Optional[str] = None,
     auditor: Optional[str] = None,
-    scope: Optional[list[str]] = None,
+    scope: Optional[StrList] = None,
     wcag_level: str = WCAGLevel.AA.value,
 ) -> Audit:
     """Create a new design audit session.
@@ -597,7 +617,7 @@ def delete_design_issue(issue_id: int) -> bool:
 def create_design_system(
     name: str,
     brand: str,
-    colors: Optional[list[dict]] = None,
+    colors: Optional[DictList] = None,
     typography: Optional[dict] = None,
     spacing: Optional[dict] = None,
     description: Optional[str] = None,
@@ -666,7 +686,7 @@ def list_design_systems(limit: int = 50) -> list[DesignSystem]:
 def update_design_system(
     system_id: int,
     name: Optional[str] = None,
-    colors: Optional[list[dict]] = None,
+    colors: Optional[DictList] = None,
     typography: Optional[dict] = None,
     spacing: Optional[dict] = None,
 ) -> Optional[DesignSystem]:
@@ -757,7 +777,7 @@ def create_component(
     name: str,
     category: str,
     description: str,
-    variants: Optional[list[dict]] = None,
+    variants: Optional[DictList] = None,
     props: Optional[dict] = None,
     usage_notes: Optional[str] = None,
 ) -> Component:
@@ -845,7 +865,7 @@ def update_component(
     component_id: int,
     name: Optional[str] = None,
     description: Optional[str] = None,
-    variants: Optional[list[dict]] = None,
+    variants: Optional[DictList] = None,
     props: Optional[dict] = None,
     usage_notes: Optional[str] = None,
 ) -> Optional[Component]:

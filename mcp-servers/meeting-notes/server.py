@@ -4,12 +4,32 @@ A FastMCP server for managing meeting notes, agendas, and action items.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 from pathlib import Path
 import json
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
 from fastmcp import FastMCP
+
+# --- tolerate JSON-stringified list params from some MCP clients ---------------
+# A few MCP client harnesses serialize Optional[list[...]] tool params as JSON
+# strings. BeforeValidator runs before pydantic validates the list type, so we
+# parse strings back into real lists while passing arrays through untouched.
+def _coerce_json_list(value):
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else [parsed]
+        except (json.JSONDecodeError, TypeError):
+            return [value]
+    return value
+
+
+StrList = Annotated[list[str], BeforeValidator(_coerce_json_list)]
+IntList = Annotated[list[int], BeforeValidator(_coerce_json_list)]
+DictList = Annotated[list[dict], BeforeValidator(_coerce_json_list)]
+# ------------------------------------------------------------------------------
+
 
 mcp = FastMCP(
     name="Meeting Notes",
@@ -182,7 +202,7 @@ def create_meeting(
     duration_minutes: int = 60,
     location: Optional[str] = None,
     description: Optional[str] = None,
-    attendee_ids: Optional[list[int]] = None
+    attendee_ids: Optional[IntList] = None
 ) -> Meeting:
     """Create a new meeting.
 

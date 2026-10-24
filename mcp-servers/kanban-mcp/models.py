@@ -2,8 +2,28 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
-from pydantic import BaseModel, Field
+from typing import Annotated, Optional
+from pydantic import BaseModel, BeforeValidator, Field
+
+
+# --- tolerate JSON-stringified list params from some MCP clients ---------------
+# A few MCP client harnesses serialize Optional[list[...]] tool params as JSON
+# strings. BeforeValidator runs before pydantic validates the list type, so we
+# parse strings back into real lists while passing arrays through untouched.
+def _coerce_json_list(value):
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else [parsed]
+        except (json.JSONDecodeError, TypeError):
+            return [value]
+    return value
+
+
+StrList = Annotated[list[str], BeforeValidator(_coerce_json_list)]
+IntList = Annotated[list[int], BeforeValidator(_coerce_json_list)]
+DictList = Annotated[list[dict], BeforeValidator(_coerce_json_list)]
+# ------------------------------------------------------------------------------
 
 
 class TaskStatus(str, Enum):
@@ -126,7 +146,7 @@ class UpdateTaskInput(BaseModel):
     description: Optional[str] = Field(None, description="New description")
     status: Optional[TaskStatus] = Field(None, description="New status")
     priority: Optional[TaskPriority] = Field(None, description="New priority")
-    tags: Optional[list[str]] = Field(None, description="New tags")
+    tags: Optional[StrList] = Field(None, description="New tags")
     assignee: Optional[str] = Field(None, description="New assignee")
     due_date: Optional[str] = Field(None, description="New due date in ISO format")
 
@@ -135,4 +155,4 @@ class CreateBoardInput(BaseModel):
     """Input for creating a new board."""
     name: str = Field(..., description="Board name")
     description: Optional[str] = Field(None, description="Board description")
-    columns: Optional[list[TaskStatus]] = Field(None, description="Custom columns")
+    columns: Optional[Annotated[list[TaskStatus], BeforeValidator(_coerce_json_list)]] = Field(None, description="Custom columns")

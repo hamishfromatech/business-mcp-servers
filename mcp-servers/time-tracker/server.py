@@ -4,11 +4,31 @@ A FastMCP server for tracking time spent on activities and projects.
 """
 
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Annotated, Optional
 from pathlib import Path
 import json
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
 from fastmcp import FastMCP
+
+# --- tolerate JSON-stringified list params from some MCP clients ---------------
+# A few MCP client harnesses serialize Optional[list[...]] tool params as JSON
+# strings. BeforeValidator runs before pydantic validates the list type, so we
+# parse strings back into real lists while passing arrays through untouched.
+def _coerce_json_list(value):
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else [parsed]
+        except (json.JSONDecodeError, TypeError):
+            return [value]
+    return value
+
+
+StrList = Annotated[list[str], BeforeValidator(_coerce_json_list)]
+IntList = Annotated[list[int], BeforeValidator(_coerce_json_list)]
+DictList = Annotated[list[dict], BeforeValidator(_coerce_json_list)]
+# ------------------------------------------------------------------------------
+
 
 mcp = FastMCP(
     name="Time Tracker",
@@ -281,7 +301,7 @@ def delete_project(project_id: int) -> bool:
 def start_timer(
     project_id: Optional[int] = None,
     description: Optional[str] = None,
-    tags: Optional[list[str]] = None
+    tags: Optional[StrList] = None
 ) -> ActiveTimer:
     """Start a new time tracking timer.
 
@@ -362,7 +382,7 @@ def log_time(
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
     date: Optional[str] = None,
-    tags: Optional[list[str]] = None,
+    tags: Optional[StrList] = None,
     billable: bool = True
 ) -> TimeEntry:
     """Log a time entry manually.
@@ -436,7 +456,7 @@ def update_time_entry(
     description: Optional[str] = None,
     duration_minutes: Optional[int] = None,
     date: Optional[str] = None,
-    tags: Optional[list[str]] = None,
+    tags: Optional[StrList] = None,
     billable: Optional[bool] = None
 ) -> Optional[TimeEntry]:
     """Update a time entry.

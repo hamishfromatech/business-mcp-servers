@@ -4,12 +4,32 @@ A FastMCP server for managing code reviews, tracking issues, and maintaining cod
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 from pathlib import Path
 import json
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
 from fastmcp import FastMCP
+
+# --- tolerate JSON-stringified list params from some MCP clients ---------------
+# A few MCP client harnesses serialize Optional[list[...]] tool params as JSON
+# strings. BeforeValidator runs before pydantic validates the list type, so we
+# parse strings back into real lists while passing arrays through untouched.
+def _coerce_json_list(value):
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else [parsed]
+        except (json.JSONDecodeError, TypeError):
+            return [value]
+    return value
+
+
+StrList = Annotated[list[str], BeforeValidator(_coerce_json_list)]
+IntList = Annotated[list[int], BeforeValidator(_coerce_json_list)]
+DictList = Annotated[list[dict], BeforeValidator(_coerce_json_list)]
+# ------------------------------------------------------------------------------
+
 
 mcp = FastMCP(
     name="Code Reviewer",
@@ -179,7 +199,7 @@ def create_review(
     branch: str,
     reviewer: Optional[str] = None,
     description: Optional[str] = None,
-    files: Optional[list[str]] = None,
+    files: Optional[StrList] = None,
 ) -> Review:
     """Create a new code review session.
 
@@ -548,8 +568,8 @@ def create_standard(
     category: str,
     description: str,
     rules: list[str],
-    examples: Optional[list[dict]] = None,
-    references: Optional[list[str]] = None,
+    examples: Optional[DictList] = None,
+    references: Optional[StrList] = None,
 ) -> Standard:
     """Create a code quality standard.
 
@@ -623,8 +643,8 @@ def update_standard(
     standard_id: int,
     name: Optional[str] = None,
     description: Optional[str] = None,
-    rules: Optional[list[str]] = None,
-    examples: Optional[list[dict]] = None,
+    rules: Optional[StrList] = None,
+    examples: Optional[DictList] = None,
 ) -> Optional[Standard]:
     """Update a code standard.
 

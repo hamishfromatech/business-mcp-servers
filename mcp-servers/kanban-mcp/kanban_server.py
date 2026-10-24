@@ -26,11 +26,32 @@ import threading
 import webbrowser
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Annotated, Optional
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import urllib.parse
 
 from fastmcp import FastMCP
+from pydantic import BeforeValidator
+
+# --- tolerate JSON-stringified list params from some MCP clients ---------------
+# A few MCP client harnesses serialize Optional[list[...]] tool params as JSON
+# strings. BeforeValidator runs before pydantic validates the list type, so we
+# parse strings back into real lists while passing arrays through untouched.
+def _coerce_json_list(value):
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else [parsed]
+        except (json.JSONDecodeError, TypeError):
+            return [value]
+    return value
+
+
+StrList = Annotated[list[str], BeforeValidator(_coerce_json_list)]
+IntList = Annotated[list[int], BeforeValidator(_coerce_json_list)]
+DictList = Annotated[list[dict], BeforeValidator(_coerce_json_list)]
+# ------------------------------------------------------------------------------
+
 
 from models import Board, Task, TaskStatus, TaskPriority, CreateTaskInput, UpdateTaskInput, CreateBoardInput
 from storage import KanbanStorage
@@ -64,7 +85,7 @@ storage = KanbanStorage()
 def create_board(
     name: str,
     description: Optional[str] = None,
-    columns: Optional[list[str]] = None
+    columns: Optional[StrList] = None
 ) -> str:
     """
     Create a new kanban board.
@@ -179,7 +200,7 @@ def create_task(
     description: Optional[str] = None,
     status: str = "todo",
     priority: str = "medium",
-    tags: Optional[list[str]] = None,
+    tags: Optional[StrList] = None,
     assignee: Optional[str] = None,
     due_date: Optional[str] = None
 ) -> str:
@@ -258,7 +279,7 @@ def update_task(
     description: Optional[str] = None,
     status: Optional[str] = None,
     priority: Optional[str] = None,
-    tags: Optional[list[str]] = None,
+    tags: Optional[StrList] = None,
     assignee: Optional[str] = None,
     due_date: Optional[str] = None
 ) -> str:

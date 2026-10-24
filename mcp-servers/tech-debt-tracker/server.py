@@ -4,12 +4,32 @@ A FastMCP server for tracking technical debt, managing refactoring tasks, and mo
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 from pathlib import Path
 import json
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
 from fastmcp import FastMCP
+
+# --- tolerate JSON-stringified list params from some MCP clients ---------------
+# A few MCP client harnesses serialize Optional[list[...]] tool params as JSON
+# strings. BeforeValidator runs before pydantic validates the list type, so we
+# parse strings back into real lists while passing arrays through untouched.
+def _coerce_json_list(value):
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else [parsed]
+        except (json.JSONDecodeError, TypeError):
+            return [value]
+    return value
+
+
+StrList = Annotated[list[str], BeforeValidator(_coerce_json_list)]
+IntList = Annotated[list[int], BeforeValidator(_coerce_json_list)]
+DictList = Annotated[list[dict], BeforeValidator(_coerce_json_list)]
+# ------------------------------------------------------------------------------
+
 
 mcp = FastMCP(
     name="Tech Debt Tracker",
@@ -229,8 +249,8 @@ def create_debt_item(
     effort: str = EffortEstimate.MEDIUM.value,
     file_path: Optional[str] = None,
     component: Optional[str] = None,
-    tags: Optional[list[str]] = None,
-    related_items: Optional[list[int]] = None,
+    tags: Optional[StrList] = None,
+    related_items: Optional[IntList] = None,
     business_value: Optional[str] = None,
 ) -> DebtItem:
     """Create a new technical debt item.
@@ -354,7 +374,7 @@ def update_debt_item(
     effort: Optional[str] = None,
     status: Optional[str] = None,
     assigned_to: Optional[str] = None,
-    tags: Optional[list[str]] = None,
+    tags: Optional[StrList] = None,
 ) -> Optional[DebtItem]:
     """Update a debt item.
 
@@ -480,12 +500,12 @@ def delete_debt_item(debt_id: int) -> bool:
 def create_refactoring_task(
     title: str,
     description: str,
-    debt_ids: Optional[list[int]] = None,
-    file_paths: Optional[list[str]] = None,
+    debt_ids: Optional[IntList] = None,
+    file_paths: Optional[StrList] = None,
     effort: str = EffortEstimate.MEDIUM.value,
-    benefits: Optional[list[str]] = None,
-    risks: Optional[list[str]] = None,
-    prerequisites: Optional[list[int]] = None,
+    benefits: Optional[StrList] = None,
+    risks: Optional[StrList] = None,
+    prerequisites: Optional[IntList] = None,
 ) -> RefactoringTask:
     """Create a refactoring task.
 
