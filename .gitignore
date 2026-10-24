@@ -2,6 +2,7 @@
 .claude
 .vscode/
 .idea/
+.a-coder-cli/
 
 # Python virtual environments
 venv/
