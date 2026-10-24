@@ -1,20 +1,44 @@
 # MCP Servers for Business
 
-
 ![MCP Servers Poster](poster.png)
-
-
 
 A collection of production-ready MCP (Model Context Protocol) server examples built with FastMCP, designed to teach you how to create servers that solve real business problems.
 
 Created by **hamishfromatech** - [YouTube](https://youtube.com/@hamishfromatech)
 <a href="https://buymeacoffee.com/hamishfromatech" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
+## Contents
+
+- [What This Repository Is](#what-this-repository-is)
+- [Servers Overview](#servers-overview)
+- [Quick Start](#quick-start)
+- [Key Concepts Demonstrated](#key-concepts-demonstrated)
+- [Architecture Patterns](#architecture-patterns)
+- [Performance & Reliability](#performance--reliability)
+- [Environment Variables](#environment-variables)
+- [Project Structure](#project-structure)
+- [Testing](#testing)
+- [Learning Path](#learning-path)
+- [Why FastMCP?](#why-fastmcp)
+- [Data Management](#data-management)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## What This Repository Is
 
 This repository contains **27 fully-functional MCP servers** that demonstrate patterns, tools, and resources you can use as reference when building your own MCP servers. Each server is self-contained, well-documented, and showcases different aspects of the MCP protocol.
 
 **The key insight**: These servers don't need to connect to any external applications or services. They're designed to work standalone, proving that you can build powerful, business-valuable MCP servers without complex integrations.
+
+**At a glance**
+
+| | |
+|---|---|
+| Servers | 27, each independently runnable |
+| External APIs required | None |
+| Storage | Plain, human-readable JSON |
+| Test suites | 6 pytest suites (64 tests) |
+| Runtime | Python 3.10+ and FastMCP |
 
 ## Why This Matters
 
@@ -23,7 +47,7 @@ Many MCP tutorials focus on connecting to external APIs (Slack, GitHub, Google, 
 - **Data organization** - Structuring information for AI to query
 - **Workflow automation** - Creating repeatable processes
 - **Knowledge management** - Building searchable systems
-- **Tracking & analytics** - Monitoring habits, time, expenses
+- **Tracking & analytics** - Monitoring habits, time, expenses, revenue, SLAs
 
 This repository proves that MCP servers can deliver all of this without a single external API key.
 
@@ -84,7 +108,7 @@ This repository proves that MCP servers can deliver all of this without a single
 |--------|-------------|--------------|-----------|
 | [File Organizer](./mcp-servers/file-organizer) | Organize and categorize files | File analysis, duplicate detection, organization rules | `organizer.json` |
 | [Inventory Manager](./mcp-servers/inventory-manager) | Stock and product management | Stock in/out, transfers, low-stock alerts | `inventory.json` |
-| [Password Vault](./mcp-servers/password-vault) | Secure credential storage | Encryption, password generation, strength checking | `vault.json` |
+| [Password Vault](./mcp-servers/password-vault) | Secure credential storage | AES/Fernet encryption, PBKDF2 key derivation, password generation, strength checking | `vault.json` |
 | [Business Search](./mcp-servers/business-search) | Cross-server search hub | One query across every server's JSON data, incremental indexing | None (indexes other servers) |
 
 ### Developer Tools
@@ -101,21 +125,25 @@ This repository proves that MCP servers can deliver all of this without a single
 Each server is standalone and can be run independently:
 
 ```bash
-# Install FastMCP
+# Install FastMCP (and any server-specific extras)
 pip install fastmcp
 
-# Navigate to any server
-cd mcp-servers/contact-book
+# Or install a server's exact dependencies
+pip install -r mcp-servers/invoice-manager/requirements.txt
 
-# Run the server
+# Navigate to any server and run it
+cd mcp-servers/contact-book
 python server.py
 ```
 
 **Data Persistence**: Each server automatically creates a `data/` directory on first use. All your data is stored in JSON files and persists across server restarts. You can find your data at `mcp-servers/<server-name>/data/<server-name>.json`.
 
+**Connecting to a client**: see the configuration examples in [mcp-servers/README.md](./mcp-servers/README.md) for Claude Desktop, Claude Code, and the FastMCP CLI.
+
 ## Key Concepts Demonstrated
 
 ### 1. Tools
+
 Every server exposes tools that AI assistants can call:
 
 ```python
@@ -126,6 +154,7 @@ def create_contact(name: str, email: str = None) -> dict:
 ```
 
 ### 2. Resources
+
 Resources provide read-only data access:
 
 ```python
@@ -136,11 +165,12 @@ def get_all_contacts() -> str:
 ```
 
 ### 3. Persistent Storage
-All servers feature JSON-based persistent storage - data survives server restarts:
+
+All 23 `server.py` data servers use the same hardened JSON persistence helper:
 
 ```python
-# Data persistence setup
-DATA_DIR = Path(__file__).parent / "data"
+# Override the data directory for tests or deployments
+DATA_DIR = Path(os.environ.get("MCP_DATA_DIR") or (Path(__file__).parent / "data"))
 DATA_FILE = DATA_DIR / "contacts.json"
 
 def _load_data() -> dict:
@@ -150,38 +180,32 @@ def _load_data() -> dict:
     return {"contacts": {}, "next_id": 1}
 
 def _save_data(data: dict) -> None:
-    # Atomic + thread-safe: write a temp file, then os.replace() it into place.
-    # A crash mid-write can never leave a truncated/corrupt JSON file.
+    # Serialize once, skip identical writes, write atomically under a lock.
+    payload = json.dumps(data, indent=2, default=str)
     with _write_lock:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        fd, tmp_path = tempfile.mkstemp(dir=str(DATA_DIR), suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, default=str)
-            os.replace(tmp_path, DATA_FILE)
-        except BaseException:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-            raise
+        if payload == _last_payload:
+            return
+        _write_payload(payload)   # temp file + os.replace()
 ```
 
-Every server uses the same hardened persistence helper:
+Properties shared by every data server:
+
 - **Atomic writes** - temp file + `os.replace()`, so an interrupted write cannot corrupt your data
 - **Thread-safe** - a module-level `threading.Lock()` serialises concurrent tool calls
-- **Single write per mutation** - ID allocation no longer triggers a redundant save
-- **Redundant-write skipping** - identical payloads are not rewritten to disk
-- **Opt-in debouncing** - set `MCP_WRITE_DEBOUNCE_MS` to defer disk I/O; pending writes are flushed on exit and by `flush_data`
-- **Built-in backups** - every server exposes `backup_data`, `list_backups`, and `restore_backup`
+- **Redundant-write skipping** - identical payloads are never rewritten
+- **Single write per mutation** - ID allocation does not trigger a second save
+- **Opt-in debouncing** - `MCP_WRITE_DEBOUNCE_MS` defers disk I/O; pending writes flush on exit and via `flush_data`
+- **Built-in backups** - `backup_data`, `list_backups`, and `restore_backup` on every data server
 
 Each server stores its data in a dedicated `data/` directory:
+
 - **Automatic loading** - Data loads on server startup
 - **Auto-save** - Changes persist immediately after each operation
 - **Portable** - JSON files can be backed up, migrated, or inspected easily
 - **No external dependencies** - Uses only Python's built-in `json` module
 
-**Backing up your data**: Simply copy the `data/` folder from any server. To reset a server, delete its `data/` folder.
-
 ### 4. Type Safety
+
 All tools use proper type hints for better AI understanding:
 
 ```python
@@ -193,6 +217,7 @@ def create_task(
 ```
 
 ### 5. Enums for Controlled Values
+
 Status values and categories use Enums:
 
 ```python
@@ -202,10 +227,17 @@ class TaskStatus(str, Enum):
     DONE = "done"
 ```
 
+### 6. Pydantic Models
+
+Records are validated with Pydantic models and returned as typed objects, so
+clients get real JSON schemas instead of loose dicts.
+
 ## Architecture Patterns
 
 ### CRUD Pattern
+
 Most servers follow a consistent CRUD pattern:
+
 - `create_*` - Create new records
 - `get_*` - Retrieve by ID
 - `list_*` - List with filters
@@ -214,126 +246,173 @@ Most servers follow a consistent CRUD pattern:
 - `search_*` - Full-text search
 
 ### Analytics Pattern
+
 Many servers include analytics tools:
+
 - `get_*_summary` - Aggregated statistics
 - `get_*_history` - Historical data
 - `get_*_stats` - Overall metrics
 
 ### Linking Pattern
+
 Knowledge systems use bi-directional linking:
+
 - Track outgoing links in content
 - Calculate backlinks
 - Find paths between notes
 - Identify hub and orphan notes
 
+### Business Logic Patterns
+
+The business servers demonstrate reusable domain techniques:
+
+| Pattern | Server | What it shows |
+|---------|--------|---------------|
+| Money math | Invoice Manager | Line-item totals, tax, discounts, rounding to cents |
+| Aging buckets | Invoice Manager | `current / 1-30 / 31-60 / 61-90 / 90+` receivables |
+| Recurring schedules | Invoice Manager, Contract Manager | Month-end-safe date advancement |
+| SLA windows | Support Desk | Deadline derivation, at-risk vs breached, compliance % |
+| Bidirectional targets | OKR Tracker | Progress works when the target is lower than the start |
+| Hierarchy rollups | OKR Tracker | Objective progress = mean of key results |
+| Notice deadlines | Contract Manager | `end_date - notice_days`, "notice passed" warnings |
+| On-time scoring | Vendor Manager | `received_at` vs `expected_at` per order |
+| Cross-file indexing | Business Search | Incremental mtime/size cache, nested record extraction |
+| Bulk operations | Invoice / Support / OKR | One disk write for N records |
+
+## Performance & Reliability
+
+Recent hardening across every data server:
+
+- **Atomic, locked writes** - no torn files, no lost updates under concurrent tool calls
+- **Redundant-write skipping** - unchanged state never touches the disk
+- **Optional debouncing** - `MCP_WRITE_DEBOUNCE_MS` trades a small durability window for fewer writes
+- **Bulk endpoints** - `bulk_create_*` / `bulk_add_*` collapse N saves into 1
+- **Backups** - snapshot, list, and restore from inside the MCP client
+- **Incremental indexing** - Business Search re-parses only changed files
+- **TTL skill scanning** - Skills Server stats only changed `SKILL.md` files
+- **Secure vault** - AES/Fernet with PBKDF2-HMAC-SHA256 (600k iterations) and a random salt
+
+## Environment Variables
+
+All servers respect these where applicable:
+
+| Variable | Used by | Purpose |
+|----------|---------|---------|
+| `MCP_DATA_DIR` | All 23 `server.py` data servers | Store data somewhere other than `<server>/data/` (career-manager and kanban-mcp manage their own storage) |
+| `MCP_WRITE_DEBOUNCE_MS` | All 23 `server.py` data servers | Defer disk writes by N milliseconds (default `0` = write immediately) |
+| `MCP_DATA_ROOTS` | Business Search | `os.pathsep`-separated roots to index instead of the default `mcp-servers/` directory |
+| `SKILLS_REFRESH_TTL_SECONDS` | Skills Server | Minimum seconds between skill-directory change checks (default `30`) |
+| `SKILLS_PATH` | Skills Server | Extra `os.pathsep`-separated skill directories to scan |
+
+Examples:
+
+```bash
+# Keep all data in a shared volume
+MCP_DATA_DIR=/srv/mcp-data python server.py
+
+# Batch writes for high-throughput ingestion
+MCP_WRITE_DEBOUNCE_MS=250 python server.py
+
+# Point the search hub at multiple data roots
+MCP_DATA_ROOTS=/srv/mcp-data:/backup/mcp-data python server.py
+```
+
 ## Project Structure
 
 ```
 mcp-servers/
-├── career-manager/
-│   ├── server.py              # Career management with 70+ tools
-│   ├── README.md              # Server-specific documentation
-│   └── pyproject.toml         # Package configuration
-├── contact-book/
-│   ├── server.py              # Main server implementation
-│   ├── README.md              # Server-specific documentation
-│   └── data/                  # Persistent storage (auto-created)
-│       └── contacts.json      # Contact data
-├── crm/
-│   ├── server.py
-│   └── data/
-│       └── crm.json           # Leads, deals, customers, interactions
+├── README.md                     # Client configuration + per-server index
+│
+├── # Business servers
+├── invoice-manager/              # server.py, README.md, requirements*.txt, tests/
+├── support-desk/                 #   "
+├── contract-manager/             #   "
+├── vendor-manager/               #   "
+├── crm/                          #   "
+├── contact-book/                 #   "
+├── okr-tracker/                  #   "
+│
+├── # Knowledge & productivity
 ├── document-wiki/
-│   ├── server.py
-│   └── data/
-│       └── wiki.json          # Documents, categories
-├── expense-tracker/
-│   ├── server.py
-│   └── data/
-│       └── expenses.json      # Expenses, budgets, categories
-├── file-organizer/
-│   ├── server.py
-│   └── data/
-│       └── organizer.json     # Rules, file registry
-├── habit-tracker/
-│   ├── server.py
-│   └── data/
-│       └── habits.json        # Habits, check-ins
-├── inventory-manager/
-│   ├── server.py
-│   └── data/
-│       └── inventory.json     # Products, stock, movements
-├── kanban-mcp/
-│   ├── kanban_server.py
-│   ├── models.py
-│   ├── storage.py
-│   ├── cli.py
-│   └── kanban_data.json       # Boards, tasks, columns
-├── journal/
-│   ├── server.py
-│   └── data/
-│       └── journal.json       # Entries, tags
-├── meeting-notes/
-│   ├── server.py
-│   └── data/
-│       └── meetings.json      # Meetings, action items
-├── notes-ideas/
-│   ├── server.py
-│   └── data/
-│       └── notes.json         # Notes, folders
-├── password-vault/
-│   ├── server.py
-│   └── data/
-│       └── vault.json         # Encrypted credentials
-├── project-manager/
-│   ├── server.py
-│   └── data/
-│       └── projects.json      # Projects, tasks, milestones
-├── task-automator/
-│   ├── server.py
-│   └── data/
-│       └── automator.json     # Workflows, templates
-├── time-tracker/
-│   ├── server.py
-│   └── data/
-│       └── time.json          # Time entries, projects
 ├── zettelkasten/
-│   ├── server.py
-│   └── data/
-│       └── zettelkasten.json  # Notes, links, tags
-├── skills-server/
-│   └── server.py              # No persistence (reads from filesystem)
+├── notes-ideas/
+├── project-manager/
+├── meeting-notes/
+├── task-automator/
+├── journal/
+├── habit-tracker/
+├── time-tracker/
+├── expense-tracker/
+│
+├── # Utilities & dev tools
+├── file-organizer/
+├── inventory-manager/
+├── password-vault/               # AES/Fernet + PBKDF2 encryption
+├── business-search/              # Cross-server search hub
+├── skills-server/                # No persistence (filesystem + TTL cache)
 ├── code-reviewer/
-│   ├── server.py
-│   ├── README.md
-│   └── data/
-│       └── code_reviewer.json # Reviews, issues, standards
 ├── design-audit/
-│   ├── server.py
-│   ├── README.md
-│   └── data/
-│       └── design_audit.json  # Audits, issues, design systems
-└── tech-debt-tracker/
-    ├── server.py
-    ├── README.md
-    └── data/
-        └── tech_debt.json     # Debt items, tasks, metrics
+├── tech-debt-tracker/
+│
+├── # Special layouts
+├── career-manager/               # src/career_manager/ package + pyproject.toml
+└── kanban-mcp/                   # kanban_server.py, models.py, storage.py, cli.py, index.html
 ```
+
+Per-server layout (the common case):
+
+```
+<server-name>/
+├── server.py                 # FastMCP server
+├── README.md                 # Tool reference and examples
+├── requirements.txt          # Runtime dependencies
+├── requirements-dev.txt      # Test dependencies
+├── tests/                    # pytest suite
+│   └── test_<name>.py
+└── data/                     # Auto-created on first write (gitignored)
+    ├── <name>.json
+    └── backups/              # Created by backup_data
+```
+
+## Testing
+
+Six servers ship with pytest suites covering their core logic (money math,
+payment allocation, aging, SLA windows, progress math, search indexing,
+renewal deadlines, and procurement scoring):
+
+```bash
+pip install -r mcp-servers/invoice-manager/requirements-dev.txt
+
+pytest mcp-servers/invoice-manager/tests \
+       mcp-servers/support-desk/tests \
+       mcp-servers/okr-tracker/tests \
+       mcp-servers/business-search/tests \
+       mcp-servers/contract-manager/tests \
+       mcp-servers/vendor-manager/tests
+```
+
+Expected: `64 passed`.
+
+Tests isolate themselves with `MCP_DATA_DIR` / `MCP_DATA_ROOTS`, so they never
+touch your real data.
 
 ## Learning Path
 
 **Beginner**: Start with these simple, focused servers:
+
 1. Contact Book - Basic CRUD operations
 2. Notes & Ideas - Simple note management
 3. Habit Tracker - Daily tracking patterns
 
 **Intermediate**: These introduce more complex relationships:
+
 1. Project Manager - Hierarchical tasks, team management
 2. CRM - Multi-entity relationships (leads, deals, customers)
 3. Meeting Notes - Agendas, attendees, action items
 4. Kanban - Web UI, CLI tools, board management
 
 **Advanced**: Sophisticated patterns and algorithms:
+
 1. Zettelkasten - Link graphs, pathfinding, hub detection
 2. Document Wiki - Wiki link parsing, backlinks
 3. Task Automator - Workflows, triggers, template rendering
@@ -358,33 +437,49 @@ All servers use [FastMCP](https://github.com/jlowin/fastmcp) because it provides
 - **Built-in server** - No boilerplate code needed
 - **Development mode** - Hot reload during development
 
-## Contributing
-
-This is an educational repository. Feel free to:
-- Use these servers as starting points for your own projects
-- Suggest improvements or new server ideas
-- Report issues or documentation gaps
-
 ## Data Management
 
 ### Backup
-Simply copy the `data/` directory from any server:
+
+Every data server exposes backup tools your AI client can call:
+
+| Tool | Purpose |
+|------|---------|
+| `backup_data` | Snapshot the current JSON into `data/backups/<name>-<timestamp>.json` |
+| `list_backups` | List snapshots, newest first |
+| `restore_backup(name)` | Replace current data from a snapshot (restart the server to load it) |
+
+You can also copy the folder yourself:
+
 ```bash
 cp -r mcp-servers/contact-book/data/ backup/contact-book/
 ```
 
 ### Migration
+
 Data files are plain JSON - you can:
+
 - Edit them directly with any text editor
 - Import/export to other systems
 - Version control your data with git
 
 ### Reset
+
 To reset a server's data, delete its JSON file:
+
 ```bash
 rm mcp-servers/contact-book/data/contacts.json
 ```
+
 The server will start fresh on next run.
+
+## Contributing
+
+This is an educational repository. Feel free to:
+
+- Use these servers as starting points for your own projects
+- Suggest improvements or new server ideas
+- Report issues or documentation gaps
 
 ## License
 
