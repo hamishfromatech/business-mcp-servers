@@ -8,6 +8,8 @@ from typing import Annotated, Optional
 from pathlib import Path
 import json
 import os
+import shutil
+import atexit
 import tempfile
 import threading
 from enum import Enum
@@ -108,7 +110,7 @@ class WeeklyOverview(BaseModel):
     days: list[DayEntry]
 
 # Data persistence setup
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path(os.environ.get("MCP_DATA_DIR") or (Path(__file__).parent / "data"))
 DATA_FILE = DATA_DIR / "habits.json"
 
 
@@ -121,26 +123,112 @@ def _load_data() -> dict:
 
 
 _write_lock = threading.Lock()
+_last_payload: Optional[str] = None
+_pending_payload: Optional[str] = None
+_flush_timer: Optional[threading.Timer] = None
+_WRITE_DEBOUNCE_MS = int(os.environ.get("MCP_WRITE_DEBOUNCE_MS", "0") or 0)
+
+
+def _write_payload(payload: str) -> None:
+    """Atomically replace the data file with serialized JSON."""
+    global _last_payload
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=str(DATA_DIR), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+        os.replace(tmp_path, DATA_FILE)
+        _last_payload = payload
+    except BaseException:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
+
+def _flush_pending() -> None:
+    """Write any deferred payload to disk immediately."""
+    global _pending_payload
+    with _write_lock:
+        if _pending_payload is not None:
+            payload, _pending_payload = _pending_payload, None
+            _write_payload(payload)
 
 
 def _save_data(data: dict) -> None:
-    """Save data to JSON file atomically and thread-safely.
+    """Save data atomically, skipping unchanged writes.
 
     Writes to a temp file in the same directory then os.replace()s it into
     place, so an interrupted write can never leave a truncated/corrupt file.
-    The lock serialises concurrent tool calls writing the same file.
+    Set MCP_WRITE_DEBOUNCE_MS>0 to defer disk I/O; pending writes are flushed
+    on exit and by the flush_data tool.
     """
+    global _pending_payload, _flush_timer
+    payload = json.dumps(data, indent=2, default=str)
+    if _WRITE_DEBOUNCE_MS <= 0:
+        with _write_lock:
+            if payload != _last_payload:
+                _write_payload(payload)
+        return
     with _write_lock:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        fd, tmp_path = tempfile.mkstemp(dir=str(DATA_DIR), suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, default=str)
-            os.replace(tmp_path, DATA_FILE)
-        except BaseException:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-            raise
+        if payload == _last_payload:
+            return
+        _pending_payload = payload
+        if _flush_timer is not None:
+            _flush_timer.cancel()
+        _flush_timer = threading.Timer(_WRITE_DEBOUNCE_MS / 1000.0, _flush_pending)
+        _flush_timer.daemon = True
+        _flush_timer.start()
+
+
+atexit.register(_flush_pending)
+
+
+@mcp.tool
+def flush_data() -> dict:
+    """Flush any deferred writes to disk immediately."""
+    _flush_pending()
+    return {"flushed": True, "path": str(DATA_FILE), "debounce_ms": _WRITE_DEBOUNCE_MS}
+
+
+@mcp.tool
+def backup_data() -> dict:
+    """Copy the current data file into data/backups/ with a timestamp."""
+    _flush_pending()
+    if not DATA_FILE.exists():
+        raise ValueError("No data file to back up yet")
+    backup_dir = DATA_DIR / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    target = backup_dir / f"{DATA_FILE.stem}-{stamp}.json"
+    shutil.copy2(DATA_FILE, target)
+    return {"backup": str(target), "bytes": target.stat().st_size}
+
+
+@mcp.tool
+def list_backups() -> list[dict]:
+    """List available data backups, newest first."""
+    backup_dir = DATA_DIR / "backups"
+    if not backup_dir.exists():
+        return []
+    items = []
+    for path in sorted(backup_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        items.append({
+            "name": path.name,
+            "bytes": path.stat().st_size,
+            "modified_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+        })
+    return items
+
+
+@mcp.tool
+def restore_backup(name: str) -> dict:
+    """Restore a backup, replacing current data. Restart the server to load it."""
+    source = DATA_DIR / "backups" / name
+    if not source.exists():
+        raise ValueError(f"Unknown backup: {name}")
+    with _write_lock:
+        _write_payload(source.read_text(encoding="utf-8"))
+    return {"restored": name, "note": "Restart the MCP server to load the restored data"}
 
 
 # Initialize data

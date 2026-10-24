@@ -148,3 +148,20 @@ def test_invoice_persists_and_reloads(tmp_path, monkeypatch, inv):
     data = (tmp_path / "invoices.json").read_text()
     assert "Acme" in data
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_bulk_create_invoices_uses_one_write(inv, monkeypatch):
+    client = inv.create_client(name="Acme")
+    writes = []
+    original = inv._write_payload
+    monkeypatch.setattr(inv, "_write_payload",
+                        lambda payload: (writes.append(1), original(payload))[1])
+    created = inv.bulk_create_invoices(client.id, [
+        {"line_items": [{"description": "A", "quantity": 1, "unit_price": 10}]},
+        {"line_items": [{"description": "B", "quantity": 2, "unit_price": 20}]},
+        {"line_items": [{"description": "C", "quantity": 3, "unit_price": 30}]},
+    ])
+    assert len(created) == 3
+    assert [c.total for c in created] == [10.0, 40.0, 90.0]
+    assert len(writes) == 1
+    assert len(inv.list_invoices()) == 3

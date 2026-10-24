@@ -130,3 +130,20 @@ def test_reopen_clears_resolution(desk):
 def test_invalid_priority_rejected(desk):
     with pytest.raises(ValueError):
         desk.create_ticket("Help", "x", "Alice", priority="whenever")
+
+
+def test_bulk_create_tickets_uses_one_write(desk, monkeypatch):
+    writes = []
+    original = desk._write_payload
+    monkeypatch.setattr(desk, "_write_payload",
+                        lambda payload: (writes.append(1), original(payload))[1])
+    created = desk.bulk_create_tickets([
+        {"subject": "A", "description": "x", "requester_name": "Alice", "priority": "urgent"},
+        {"subject": "B", "description": "y", "requester_name": "Bob"},
+        {"subject": "C", "description": "z", "requester_name": "Cara", "tags": ["vip"]},
+    ])
+    assert len(created) == 3
+    assert created[0].priority == "urgent"
+    assert created[2].tags == ["vip"]
+    assert len(writes) == 1
+    assert len(desk.list_tickets()) == 3

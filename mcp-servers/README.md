@@ -29,6 +29,13 @@ python server.py
 | [invoice-manager](./invoice-manager) | Invoicing with payments, recurring billing, and A/R aging |
 | [support-desk](./support-desk) | Support tickets with SLA tracking, escalations, and CSAT |
 
+### Procurement & Legal
+
+| Server | Description |
+|--------|-------------|
+| [contract-manager](./contract-manager) | Contract lifecycle with expiry, renewal notice deadlines, and obligations |
+| [vendor-manager](./vendor-manager) | Suppliers, purchase orders, lead times, spend, and scorecards |
+
 ### Knowledge & Documentation
 
 | Server | Description |
@@ -178,6 +185,8 @@ rm mcp-servers/contact-book/data/contacts.json
 9. [support-desk](./support-desk) - SLA deadlines, breach detection, compliance metrics
 10. [okr-tracker](./okr-tracker) - Bidirectional progress math, rollups, check-in history
 11. [business-search](./business-search) - Cross-file indexing, incremental cache, multi-source ranking
+12. [contract-manager](./contract-manager) - Date-window logic, notice deadlines, recurring obligations
+13. [vendor-manager](./vendor-manager) - Procurement totals, lead-time forecasting, on-time scoring
 
 ## Key Concepts
 
@@ -261,7 +270,9 @@ pip install -r mcp-servers/invoice-manager/requirements-dev.txt
 pytest mcp-servers/invoice-manager/tests \
        mcp-servers/support-desk/tests \
        mcp-servers/okr-tracker/tests \
-       mcp-servers/business-search/tests
+       mcp-servers/business-search/tests \
+       mcp-servers/contract-manager/tests \
+       mcp-servers/vendor-manager/tests
 ```
 
 ---

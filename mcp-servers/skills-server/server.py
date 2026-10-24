@@ -8,7 +8,9 @@ from datetime import datetime
 from typing import Optional
 from pathlib import Path
 import json
+import os
 import re
+import time
 from pydantic import BaseModel
 from fastmcp import FastMCP
 
@@ -136,12 +138,51 @@ def discover_skills() -> dict[str, Skill]:
 
 def _reload_skills() -> None:
     """Reload skills from disk."""
-    global skills
+    global skills, _last_refresh, _skills_signature
     skills = discover_skills()
+    _last_refresh = time.monotonic()
+    _skills_signature = _dirs_signature()
+
+
+_REFRESH_TTL = float(os.environ.get("SKILLS_REFRESH_TTL_SECONDS", "30") or 30)
+
+
+def _dirs_signature() -> tuple:
+    """Cheap stat-only fingerprint of every SKILL.md, used to detect changes."""
+    signature = []
+    for skill_dir in SKILL_DIRS:
+        try:
+            for skill_path in sorted(skill_dir.iterdir()):
+                if not skill_path.is_dir():
+                    continue
+                skill_md = skill_path / "SKILL.md"
+                try:
+                    stat = skill_md.stat()
+                except FileNotFoundError:
+                    continue
+                signature.append((str(skill_md), stat.st_mtime_ns, stat.st_size))
+        except (FileNotFoundError, NotADirectoryError, PermissionError):
+            continue
+    return tuple(signature)
+
+
+def _maybe_refresh() -> None:
+    """Rescan only when the TTL has elapsed and the directory fingerprint changed."""
+    global skills, _last_refresh, _skills_signature
+    now = time.monotonic()
+    if now - _last_refresh < _REFRESH_TTL:
+        return
+    _last_refresh = now
+    signature = _dirs_signature()
+    if signature != _skills_signature:
+        _skills_signature = signature
+        skills = discover_skills()
 
 
 # Initialize skills on startup
 skills = discover_skills()
+_last_refresh = time.monotonic()
+_skills_signature = _dirs_signature()
 
 
 # === TOOLS ===
@@ -160,6 +201,7 @@ def list_skills(
     Returns:
         List of skill metadata
     """
+    _maybe_refresh()
     result = []
     for skill in skills.values():
         if has_scripts is not None and skill.has_scripts != has_scripts:
@@ -178,6 +220,7 @@ def get_skill(name: str) -> Optional[Skill]:
     Returns:
         Full skill details including content, or None if not found
     """
+    _maybe_refresh()
     name_lower = name.lower().replace(" ", "-")
     skill = skills.get(name_lower)
     if skill:
@@ -195,6 +238,7 @@ def search_skills(query: str) -> list[Skill]:
     Returns:
         List of matching skills
     """
+    _maybe_refresh()
     query_lower = query.lower()
     results = []
 
@@ -332,6 +376,7 @@ def get_skill_count() -> dict:
     Returns:
         Count of skills and skill directories
     """
+    _maybe_refresh()
     return {
         "total_skills": len(skills),
         "skill_directories": [str(d) for d in SKILL_DIRS if d.exists()],
@@ -369,6 +414,7 @@ def get_skill_resource(name: str) -> str:
 
     Load any skill by name using: skills://skill-name
     """
+    _maybe_refresh()
     name_lower = name.lower().replace(" ", "-")
     skill = skills.get(name_lower)
 
@@ -414,6 +460,7 @@ def get_skill_directories() -> str:
 @mcp.resource("skills://stats")
 def get_skills_stats() -> str:
     """Resource showing skill statistics."""
+    _maybe_refresh()
     total = len(skills)
     with_scripts = sum(1 for s in skills.values() if s.has_scripts)
     with_refs = sum(1 for s in skills.values() if s.has_references)

@@ -10,6 +10,8 @@ from pathlib import Path
 from enum import Enum
 import json
 import os
+import shutil
+import atexit
 import tempfile
 import threading
 from pydantic import BaseModel
@@ -129,21 +131,112 @@ def _load_data() -> dict:
 
 
 _write_lock = threading.Lock()
+_last_payload: Optional[str] = None
+_pending_payload: Optional[str] = None
+_flush_timer: Optional[threading.Timer] = None
+_WRITE_DEBOUNCE_MS = int(os.environ.get("MCP_WRITE_DEBOUNCE_MS", "0") or 0)
+
+
+def _write_payload(payload: str) -> None:
+    """Atomically replace the data file with serialized JSON."""
+    global _last_payload
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=str(DATA_DIR), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+        os.replace(tmp_path, DATA_FILE)
+        _last_payload = payload
+    except BaseException:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
+
+def _flush_pending() -> None:
+    """Write any deferred payload to disk immediately."""
+    global _pending_payload
+    with _write_lock:
+        if _pending_payload is not None:
+            payload, _pending_payload = _pending_payload, None
+            _write_payload(payload)
 
 
 def _save_data(data: dict) -> None:
-    """Save data to JSON file atomically and thread-safely."""
+    """Save data atomically, skipping unchanged writes.
+
+    Writes to a temp file in the same directory then os.replace()s it into
+    place, so an interrupted write can never leave a truncated/corrupt file.
+    Set MCP_WRITE_DEBOUNCE_MS>0 to defer disk I/O; pending writes are flushed
+    on exit and by the flush_data tool.
+    """
+    global _pending_payload, _flush_timer
+    payload = json.dumps(data, indent=2, default=str)
+    if _WRITE_DEBOUNCE_MS <= 0:
+        with _write_lock:
+            if payload != _last_payload:
+                _write_payload(payload)
+        return
     with _write_lock:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        fd, tmp_path = tempfile.mkstemp(dir=str(DATA_DIR), suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, default=str)
-            os.replace(tmp_path, DATA_FILE)
-        except BaseException:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-            raise
+        if payload == _last_payload:
+            return
+        _pending_payload = payload
+        if _flush_timer is not None:
+            _flush_timer.cancel()
+        _flush_timer = threading.Timer(_WRITE_DEBOUNCE_MS / 1000.0, _flush_pending)
+        _flush_timer.daemon = True
+        _flush_timer.start()
+
+
+atexit.register(_flush_pending)
+
+
+@mcp.tool
+def flush_data() -> dict:
+    """Flush any deferred writes to disk immediately."""
+    _flush_pending()
+    return {"flushed": True, "path": str(DATA_FILE), "debounce_ms": _WRITE_DEBOUNCE_MS}
+
+
+@mcp.tool
+def backup_data() -> dict:
+    """Copy the current data file into data/backups/ with a timestamp."""
+    _flush_pending()
+    if not DATA_FILE.exists():
+        raise ValueError("No data file to back up yet")
+    backup_dir = DATA_DIR / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    target = backup_dir / f"{DATA_FILE.stem}-{stamp}.json"
+    shutil.copy2(DATA_FILE, target)
+    return {"backup": str(target), "bytes": target.stat().st_size}
+
+
+@mcp.tool
+def list_backups() -> list[dict]:
+    """List available data backups, newest first."""
+    backup_dir = DATA_DIR / "backups"
+    if not backup_dir.exists():
+        return []
+    items = []
+    for path in sorted(backup_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        items.append({
+            "name": path.name,
+            "bytes": path.stat().st_size,
+            "modified_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+        })
+    return items
+
+
+@mcp.tool
+def restore_backup(name: str) -> dict:
+    """Restore a backup, replacing current data. Restart the server to load it."""
+    source = DATA_DIR / "backups" / name
+    if not source.exists():
+        raise ValueError(f"Unknown backup: {name}")
+    with _write_lock:
+        _write_payload(source.read_text(encoding="utf-8"))
+    return {"restored": name, "note": "Restart the MCP server to load the restored data"}
 
 
 # Initialize data
@@ -423,6 +516,42 @@ def create_invoice(client_id: int, line_items: list[dict],
     )
     _save()
     return _invoice_model(entry)
+
+
+@mcp.tool
+def bulk_create_invoices(client_id: int, invoice_specs: list[dict],
+                        send: bool = False) -> list[Invoice]:
+    """Create many invoices in a single disk write.
+
+    Each spec may contain: line_items (required), issue_date, due_date,
+    tax_rate, discount, currency, notes.
+    """
+    if client_id not in clients:
+        raise ValueError(f"Unknown client: {client_id}")
+    created = []
+    for spec in _as_list(invoice_specs):
+        if not isinstance(spec, dict):
+            raise ValueError(f"Invalid invoice spec: {spec!r}")
+        items = _to_items(spec.get("line_items"))
+        if not items:
+            raise ValueError("Each invoice needs at least one line item")
+        issued = spec.get("issue_date") or _today()
+        due = spec.get("due_date") or (
+            datetime.fromisoformat(issued) + timedelta(days=30)
+        ).date().isoformat()
+        if _parse_date(due).date() < _parse_date(issued).date():
+            raise ValueError("due_date cannot be before issue_date")
+        entry = _issue_invoice(
+            client_id, items, issued, due, float(spec.get("tax_rate", 0)),
+            float(spec.get("discount", 0)),
+            spec.get("currency") or clients[client_id].get("currency", "USD"),
+            spec.get("notes"),
+            InvoiceStatus.SENT.value if send else InvoiceStatus.DRAFT.value,
+        )
+        created.append(_invoice_model(entry))
+    if created:
+        _save()
+    return created
 
 
 @mcp.tool

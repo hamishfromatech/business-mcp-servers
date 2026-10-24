@@ -12,7 +12,7 @@ Created by **hamishfromatech** - [YouTube](https://youtube.com/@hamishfromatech)
 
 ## What This Repository Is
 
-This repository contains **25 fully-functional MCP servers** that demonstrate patterns, tools, and resources you can use as reference when building your own MCP servers. Each server is self-contained, well-documented, and showcases different aspects of the MCP protocol.
+This repository contains **27 fully-functional MCP servers** that demonstrate patterns, tools, and resources you can use as reference when building your own MCP servers. Each server is self-contained, well-documented, and showcases different aspects of the MCP protocol.
 
 **The key insight**: These servers don't need to connect to any external applications or services. They're designed to work standalone, proving that you can build powerful, business-valuable MCP servers without complex integrations.
 
@@ -42,6 +42,13 @@ This repository proves that MCP servers can deliver all of this without a single
 |--------|-------------|--------------|-----------|
 | [Invoice Manager](./mcp-servers/invoice-manager) | Invoicing and accounts receivable | Clients, line items, payments, recurring billing, aging report | `invoices.json` |
 | [Support Desk](./mcp-servers/support-desk) | Customer support helpdesk | Tickets, SLA deadlines, escalations, CSAT | `support.json` |
+
+### Procurement & Legal
+
+| Server | Description | Key Features | Data File |
+|--------|-------------|--------------|-----------|
+| [Contract Manager](./mcp-servers/contract-manager) | Contract lifecycle management | Expiry, renewal notice deadlines, obligations | `contracts.json` |
+| [Vendor Manager](./mcp-servers/vendor-manager) | Vendor and procurement management | Suppliers, purchase orders, lead times, scorecards | `vendors.json` |
 
 ### Knowledge & Documentation
 
@@ -162,6 +169,9 @@ Every server uses the same hardened persistence helper:
 - **Atomic writes** - temp file + `os.replace()`, so an interrupted write cannot corrupt your data
 - **Thread-safe** - a module-level `threading.Lock()` serialises concurrent tool calls
 - **Single write per mutation** - ID allocation no longer triggers a redundant save
+- **Redundant-write skipping** - identical payloads are not rewritten to disk
+- **Opt-in debouncing** - set `MCP_WRITE_DEBOUNCE_MS` to defer disk I/O; pending writes are flushed on exit and by `flush_data`
+- **Built-in backups** - every server exposes `backup_data`, `list_backups`, and `restore_backup`
 
 Each server stores its data in a dedicated `data/` directory:
 - **Automatic loading** - Data loads on server startup
@@ -336,6 +346,8 @@ mcp-servers/
 10. Support Desk - Time-based SLA logic, breach detection, compliance metrics
 11. OKR Tracker - Bidirectional progress math, hierarchical rollups, check-in history
 12. Business Search - Cross-file indexing, incremental cache refresh, multi-source ranking
+13. Contract Manager - Date-window logic, notice deadlines, recurring obligations
+14. Vendor Manager - Procurement totals, lead-time forecasting, on-time delivery scoring
 
 ## Why FastMCP?
 

@@ -107,3 +107,19 @@ def test_delete_objective_removes_check_ins(okr):
     assert okr.delete_objective(objective.id) is True
     assert okr.get_objective(objective.id) is None
     assert okr.list_check_ins(objective.id) == []
+
+
+def test_bulk_add_key_results_uses_one_write(okr, monkeypatch):
+    objective = okr.create_objective("Grow", "Hamish", "2026-Q4")
+    writes = []
+    original = okr._write_payload
+    monkeypatch.setattr(okr, "_write_payload",
+                        lambda payload: (writes.append(1), original(payload))[1])
+    krs = okr.bulk_add_key_results(objective.id, [
+        {"title": "A", "target_value": 100, "current_value": 50},
+        {"title": "B", "target_value": 10, "start_value": 10, "current_value": 10},
+        {"title": "C", "target_value": 4, "metric_unit": "%"},
+    ])
+    assert len(krs) == 3
+    assert len(writes) == 1
+    assert okr.get_objective(objective.id).progress == pytest.approx((0.5 + 1.0 + 0.0) / 3)
