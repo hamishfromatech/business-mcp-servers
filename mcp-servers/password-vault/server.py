@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import Optional
 from pathlib import Path
 import json
+import tempfile
+import threading
 import base64
 import hashlib
 import os
@@ -62,11 +64,27 @@ def _load_data() -> dict:
     }
 
 
+_write_lock = threading.Lock()
+
+
 def _save_data(data: dict) -> None:
-    """Save data to JSON file."""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, default=str)
+    """Save data to JSON file atomically and thread-safely.
+
+    Writes to a temp file in the same directory then os.replace()s it into
+    place, so an interrupted write can never leave a truncated/corrupt file.
+    The lock serialises concurrent tool calls writing the same file.
+    """
+    with _write_lock:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(dir=str(DATA_DIR), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, default=str)
+            os.replace(tmp_path, DATA_FILE)
+        except BaseException:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise
 
 
 # Initialize data

@@ -134,10 +134,25 @@ def _load_data() -> dict:
     return {"contacts": {}, "next_id": 1}
 
 def _save_data(data: dict) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, default=str)
+    # Atomic + thread-safe: write a temp file, then os.replace() it into place.
+    # A crash mid-write can never leave a truncated/corrupt JSON file.
+    with _write_lock:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(dir=str(DATA_DIR), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, default=str)
+            os.replace(tmp_path, DATA_FILE)
+        except BaseException:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise
 ```
+
+Every server uses the same hardened persistence helper:
+- **Atomic writes** - temp file + `os.replace()`, so an interrupted write cannot corrupt your data
+- **Thread-safe** - a module-level `threading.Lock()` serialises concurrent tool calls
+- **Single write per mutation** - ID allocation no longer triggers a redundant save
 
 Each server stores its data in a dedicated `data/` directory:
 - **Automatic loading** - Data loads on server startup
