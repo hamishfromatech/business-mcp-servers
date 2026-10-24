@@ -16,7 +16,7 @@ python server.py
 
 ## Security Note
 
-This server uses a simple XOR encryption for demonstration. For production use, integrate with a proper encryption library like `cryptography` and use secure key derivation.
+Secrets are encrypted at rest with AES (Fernet) using a key derived from the master password via PBKDF2-HMAC-SHA256 (600k iterations). The master password itself is never stored — only the derived key hash and salt are persisted. For production use, consider adding key rotation and hardware-backed key storage.
 
 ## Available Tools
 

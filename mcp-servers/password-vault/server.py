@@ -2,8 +2,8 @@
 Password Vault MCP Server
 A FastMCP server for securely storing and managing credentials.
 
-Note: This is a basic implementation. For production use, implement proper
-encryption at rest using libraries like cryptography or passlib.
+Secrets are encrypted at rest with AES (Fernet) using a key derived from the
+master password via PBKDF2-HMAC-SHA256 (600k iterations).
 """
 
 from datetime import datetime
@@ -12,9 +12,13 @@ from pathlib import Path
 import json
 import base64
 import hashlib
+import os
 import secrets
 from pydantic import BaseModel
 from fastmcp import FastMCP
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 mcp = FastMCP(
     name="Password Vault",
@@ -54,7 +58,7 @@ def _load_data() -> dict:
             return json.load(f)
     return {
         "vault_entries": {}, "categories": {}, "master_key_hash": None,
-        "next_entry_id": 1, "next_category_id": 1
+        "master_key_salt": None, "next_entry_id": 1, "next_category_id": 1
     }
 
 
@@ -70,6 +74,7 @@ _data = _load_data()
 vault_entries: dict[int, dict] = {int(k): v for k, v in _data.get("vault_entries", {}).items()}
 categories: dict[int, dict] = {int(k): v for k, v in _data.get("categories", {}).items()}
 master_key_hash: Optional[str] = _data.get("master_key_hash")
+master_key_salt: Optional[str] = _data.get("master_key_salt")
 
 _next_entry_id = _data.get("next_entry_id", 1)
 _next_category_id = _data.get("next_category_id", 1)
@@ -79,7 +84,7 @@ def _save() -> None:
     """Save current state to disk."""
     _save_data({
         "vault_entries": vault_entries, "categories": categories,
-        "master_key_hash": master_key_hash,
+        "master_key_hash": master_key_hash, "master_key_salt": master_key_salt,
         "next_entry_id": _next_entry_id, "next_category_id": _next_category_id
     })
 
@@ -98,27 +103,37 @@ def _get_next_category_id() -> int:
     return id_
 
 
-def _simple_encrypt(data: str, key: str) -> str:
-    """Simple XOR encryption for demo purposes.
-    In production, use proper encryption like Fernet from cryptography library.
-    """
-    key_bytes = key.encode('utf-8')
-    data_bytes = data.encode('utf-8')
-    encrypted = bytes([data_bytes[i] ^ key_bytes[i % len(key_bytes)] for i in range(len(data_bytes))])
-    return base64.b64encode(encrypted).decode('utf-8')
+ITERATIONS = 600_000  # PBKDF2-HMAC-SHA256 iterations
 
 
-def _simple_decrypt(encrypted_data: str, key: str) -> str:
-    """Simple XOR decryption for demo purposes."""
-    key_bytes = key.encode('utf-8')
-    data_bytes = base64.b64decode(encrypted_data.encode('utf-8'))
-    decrypted = bytes([data_bytes[i] ^ key_bytes[i % len(key_bytes)] for i in range(len(data_bytes))])
-    return decrypted.decode('utf-8')
+def _derive_key(master_password: str, salt: Optional[bytes] = None) -> bytes:
+    """Derive a 32-byte AES key from the master password via PBKDF2."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt or b"",
+        iterations=ITERATIONS,
+    )
+    return kdf.derive(master_password.encode("utf-8"))
 
 
-def _hash_key(key: str) -> str:
-    """Hash a key using SHA-256."""
-    return hashlib.sha256(key.encode('utf-8')).hexdigest()
+def _simple_encrypt(data: str, key: bytes) -> str:
+    """Encrypt data with AES (Fernet) using a derived key."""
+    fernet_key = base64.urlsafe_b64encode(key).decode("utf-8")
+    fernet = Fernet(fernet_key)
+    return fernet.encrypt(data.encode("utf-8")).decode("utf-8")
+
+
+def _simple_decrypt(encrypted_data: str, key: bytes) -> str:
+    """Decrypt data encrypted with AES (Fernet) using a derived key."""
+    fernet_key = base64.urlsafe_b64encode(key).decode("utf-8")
+    fernet = Fernet(fernet_key)
+    return fernet.decrypt(encrypted_data.encode("utf-8")).decode("utf-8")
+
+
+def _hash_key(key: bytes) -> str:
+    """Hash a derived key using SHA-256 for verification."""
+    return hashlib.sha256(key).hexdigest()
 
 
 # Master Key Management
@@ -132,8 +147,11 @@ def setup_vault(master_password: str) -> dict:
     Returns:
         Setup confirmation
     """
-    global master_key_hash
-    master_key_hash = _hash_key(master_password)
+    global master_key_hash, master_key_salt
+    salt = os.urandom(16)
+    key = _derive_key(master_password, salt)
+    master_key_hash = _hash_key(key)
+    master_key_salt = salt.hex()
     _save()
     return {"message": "Vault initialized successfully", "setup": True}
 
@@ -160,7 +178,11 @@ def verify_master_password(password: str) -> bool:
     """
     if master_key_hash is None:
         return False
-    return _hash_key(password) == master_key_hash
+    if master_key_salt:
+        key = _derive_key(password, bytes.fromhex(master_key_salt))
+        return _hash_key(key) == master_key_hash
+    # Legacy fallback for vaults initialized before key derivation was added
+    return hashlib.sha256(password.encode("utf-8")).hexdigest() == master_key_hash
 
 
 # Category Management
@@ -226,7 +248,8 @@ def create_entry(
         raise ValueError("Invalid master password")
 
     entry_id = _get_next_entry_id()
-    encrypted_password = _simple_encrypt(password, master_password)
+    key = _derive_key(master_password, bytes.fromhex(master_key_salt)) if master_key_salt else _derive_key(master_password)
+    encrypted_password = _simple_encrypt(password, key)
 
     entry = {
         "id": entry_id,
@@ -273,8 +296,9 @@ def get_entry(entry_id: int, master_password: str) -> Optional[dict]:
         raise ValueError("Invalid master password")
 
     entry = vault_entries[entry_id]
+    key = _derive_key(master_password, bytes.fromhex(master_key_salt)) if master_key_salt else _derive_key(master_password)
     result = entry.copy()
-    result["password"] = _simple_decrypt(entry["password_encrypted"], master_password)
+    result["password"] = _simple_decrypt(entry["password_encrypted"], key)
     del result["password_encrypted"]
     return result
 
@@ -346,7 +370,8 @@ def update_entry(
     if username is not None:
         entry["username"] = username
     if password is not None:
-        entry["password_encrypted"] = _simple_encrypt(password, master_password)
+        key = _derive_key(master_password, bytes.fromhex(master_key_salt)) if master_key_salt else _derive_key(master_password)
+        entry["password_encrypted"] = _simple_encrypt(password, key)
     if url is not None:
         entry["url"] = url
     if category_id is not None:
