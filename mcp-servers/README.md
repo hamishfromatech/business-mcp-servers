@@ -22,6 +22,13 @@ python server.py
 | [contact-book](./contact-book) | Manage contacts with CRUD operations, search, and organization |
 | [crm](./crm) | Customer relationship management with leads, deals, pipeline tracking |
 
+### Revenue & Customer Operations
+
+| Server | Description |
+|--------|-------------|
+| [invoice-manager](./invoice-manager) | Invoicing with payments, recurring billing, and A/R aging |
+| [support-desk](./support-desk) | Support tickets with SLA tracking, escalations, and CSAT |
+
 ### Knowledge & Documentation
 
 | Server | Description |
@@ -39,6 +46,7 @@ python server.py
 | [kanban-mcp](./kanban-mcp) | Kanban board with web UI, CLI tools, task management, and board statistics |
 | [meeting-notes](./meeting-notes) | Meetings with agendas, attendees, and action items |
 | [task-automator](./task-automator) | Workflows, templates, triggers, and quick actions |
+| [okr-tracker](./okr-tracker) | Objectives, key results, check-ins, and progress rollups |
 
 ### Personal Tracking
 
@@ -56,6 +64,7 @@ python server.py
 | [file-organizer](./file-organizer) | Organize and categorize files with duplicate detection |
 | [inventory-manager](./inventory-manager) | Stock and product management with low-stock alerts |
 | [password-vault](./password-vault) | Secure credential storage with password generation |
+| [business-search](./business-search) | Cross-server search hub indexing every server's JSON data |
 
 ### Developer Tools
 
@@ -165,6 +174,10 @@ rm mcp-servers/contact-book/data/contacts.json
 5. [code-reviewer](./code-reviewer) - Review sessions, issue tracking, code standards
 6. [design-audit](./design-audit) - Design systems, accessibility compliance
 7. [tech-debt-tracker](./tech-debt-tracker) - Debt tracking, snapshots, quality metrics
+8. [invoice-manager](./invoice-manager) - Money math, payment allocation, aging buckets, recurring schedules
+9. [support-desk](./support-desk) - SLA deadlines, breach detection, compliance metrics
+10. [okr-tracker](./okr-tracker) - Bidirectional progress math, rollups, check-in history
+11. [business-search](./business-search) - Cross-file indexing, incremental cache, multi-source ranking
 
 ## Key Concepts
 
@@ -238,6 +251,18 @@ python --version
 - Verify the path in your config is absolute
 - Check that Python is in your PATH
 - Try running the server directly first: `python server.py`
+
+## Running Tests
+
+Each of the newer servers ships a pytest suite:
+
+```bash
+pip install -r mcp-servers/invoice-manager/requirements-dev.txt
+pytest mcp-servers/invoice-manager/tests \
+       mcp-servers/support-desk/tests \
+       mcp-servers/okr-tracker/tests \
+       mcp-servers/business-search/tests
+```
 
 ---
 

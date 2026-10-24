@@ -12,7 +12,7 @@ Created by **hamishfromatech** - [YouTube](https://youtube.com/@hamishfromatech)
 
 ## What This Repository Is
 
-This repository contains **22 fully-functional MCP servers** that demonstrate patterns, tools, and resources you can use as reference when building your own MCP servers. Each server is self-contained, well-documented, and showcases different aspects of the MCP protocol.
+This repository contains **25 fully-functional MCP servers** that demonstrate patterns, tools, and resources you can use as reference when building your own MCP servers. Each server is self-contained, well-documented, and showcases different aspects of the MCP protocol.
 
 **The key insight**: These servers don't need to connect to any external applications or services. They're designed to work standalone, proving that you can build powerful, business-valuable MCP servers without complex integrations.
 
@@ -36,6 +36,13 @@ This repository proves that MCP servers can deliver all of this without a single
 | [Contact Book](./mcp-servers/contact-book) | Manage contacts with search and organization | CRUD operations, search | `contacts.json` |
 | [CRM](./mcp-servers/crm) | Customer relationship management | Leads, deals, pipeline tracking, interactions | `crm.json` |
 
+### Revenue & Customer Operations
+
+| Server | Description | Key Features | Data File |
+|--------|-------------|--------------|-----------|
+| [Invoice Manager](./mcp-servers/invoice-manager) | Invoicing and accounts receivable | Clients, line items, payments, recurring billing, aging report | `invoices.json` |
+| [Support Desk](./mcp-servers/support-desk) | Customer support helpdesk | Tickets, SLA deadlines, escalations, CSAT | `support.json` |
+
 ### Knowledge & Documentation
 
 | Server | Description | Key Features | Data File |
@@ -53,6 +60,7 @@ This repository proves that MCP servers can deliver all of this without a single
 | [Kanban](./mcp-servers/kanban-mcp) | Kanban board with visual interface | Web UI, CLI tools, task management, board statistics, drag-and-drop ready | `kanban_data.json` |
 | [Meeting Notes](./mcp-servers/meeting-notes) | Meetings, agendas, action items | Attendees, notes, action item tracking | `meetings.json` |
 | [Task Automator](./mcp-servers/task-automator) | Workflows and templates | Triggers, template rendering, quick actions | `automator.json` |
+| [OKR Tracker](./mcp-servers/okr-tracker) | Objectives and key results | Key results, check-ins, confidence, progress rollups | `okrs.json` |
 
 ### Personal Tracking
 
@@ -70,6 +78,7 @@ This repository proves that MCP servers can deliver all of this without a single
 | [File Organizer](./mcp-servers/file-organizer) | Organize and categorize files | File analysis, duplicate detection, organization rules | `organizer.json` |
 | [Inventory Manager](./mcp-servers/inventory-manager) | Stock and product management | Stock in/out, transfers, low-stock alerts | `inventory.json` |
 | [Password Vault](./mcp-servers/password-vault) | Secure credential storage | Encryption, password generation, strength checking | `vault.json` |
+| [Business Search](./mcp-servers/business-search) | Cross-server search hub | One query across every server's JSON data, incremental indexing | None (indexes other servers) |
 
 ### Developer Tools
 
@@ -323,6 +332,10 @@ mcp-servers/
 6. Code Reviewer - Review sessions, issue tracking with categories/severity, code standards
 7. Design Audit - Design systems, accessibility compliance, WCAG tracking
 8. Tech Debt Tracker - Interest tracking, snapshots, quality metrics
+9. Invoice Manager - Money math, tax/discount totals, payment allocation, aging buckets, recurring schedules
+10. Support Desk - Time-based SLA logic, breach detection, compliance metrics
+11. OKR Tracker - Bidirectional progress math, hierarchical rollups, check-in history
+12. Business Search - Cross-file indexing, incremental cache refresh, multi-source ranking
 
 ## Why FastMCP?
 
