@@ -1,0 +1,4 @@
+fastmcp
+pydantic
+pytest
+pytest-env

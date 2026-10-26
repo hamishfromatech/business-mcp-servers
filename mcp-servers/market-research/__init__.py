@@ -1,0 +1,1 @@
+"""Market Research MCP Server package."""

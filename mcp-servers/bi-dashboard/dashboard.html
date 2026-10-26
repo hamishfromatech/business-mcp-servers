@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BI Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #f0f2f5;
+  color: #1a202c;
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 260px;
+  background: #fff;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  position: fixed;
+  height: 100vh;
+  overflow-y: auto;
+}
+.sidebar h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 4px;
+}
+.sidebar .subtitle {
+  font-size: 12px;
+  color: #718096;
+  margin-bottom: 16px;
+}
+.sidebar .nav-section {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #a0aec0;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  letter-spacing: 0.05em;
+}
+.sidebar button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  color: #4a5568;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  margin-bottom: 4px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sidebar button:hover {
+  background: #f7fafc;
+  border-color: #cbd5e0;
+}
+.sidebar button.active {
+  background: #ebf8ff;
+  border-color: #4299e1;
+  color: #2b6cb0;
+}
+.sidebar button .icon {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Main */
+.main {
+  flex: 1;
+  margin-left: 260px;
+  display: flex;
+  flex-direction: column;
+}
+.header {
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2d3748;
+}
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+.header button {
+  padding: 8px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  color: #4a5568;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.header button:hover {
+  background: #f7fafc;
+  border-color: #cbd5e0;
+}
+.button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.button-primary {
+  background: #4299e1;
+  color: #fff;
+}
+.button-primary:hover {
+  background: #3182ce;
+}
+.button-secondary {
+  background: #edf2f7;
+  color: #4a5568;
+}
+.button-secondary:hover {
+  background: #e2e8f0;
+}
+.button-danger {
+  background: #fc8181;
+  color: #fff;
+}
+.button-danger:hover {
+  background: #f53658;
+}
+.button-sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.content {
+  padding: 20px 24px;
+  flex: 1;
+}
+
+/* KPI Grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+@media (max-width: 1100px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 768px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+}
+
+.card {
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  overflow: hidden;
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.card-header h3 {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4a5568;
+}
+.card-body {
+  padding: 16px 18px;
+  color: #718096;
+  font-size: 14px;
+}
+.kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 4px;
+}
+.kpi-sub {
+  font-size: 12px;
+}
+.kpi-sub.positive { color: #38a169; }
+.kpi-sub.negative { color: #e53e3e; }
+.kpi-trend {
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+/* Chart Grid */
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+@media (max-width: 900px) {
+  .chart-grid { grid-template-columns: 1fr; }
+}
+.chart-container {
+  position: relative;
+  height: 280px;
+}
+
+/* Data Table */
+.table-container {
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.table-header h3 {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4a5568;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.table th {
+  background: #f7fafc;
+  text-align: left;
+  padding: 10px 14px;
+  font-weight: 500;
+  color: #4a5568;
+  border-bottom: 1px solid #e2e8f0;
+}
+.table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.table tr:hover td {
+  background: #f7fafc;
+}
+
+/* Spinner */
+.spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 280px;
+  color: #a0aec0;
+  font-size: 14px;
+}
+.spinner::after {
+  content: "";
+  width: 24px;
+  height: 24px;
+  border: 2px solid #a0aec0;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 8px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Loading overlay */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(255,255,255,0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(2px);
+}
+.loading-overlay.hidden { display: none; }
+
+/* Section */
+.section {
+  margin-bottom: 16px;
+}
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 8px;
+}
+
+/* Alert */
+.alert {
+  padding: 10px 16px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.alert-warning {
+  background: #fffaf0;
+  color: #c05621;
+  border: 1px solid #fae1cc;
+}
+
+/* Utility */
+.flex { display: flex; }
+.flex-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+.gap-2 { gap: 8px; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.text-right { text-align: right; }
+.font-mono { font-family: "SF Mono", "Fira Code", "Fira Mono", monospace; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <h1>📊 BI Dashboard</h1>
+  <p class="subtitle">Business Intelligence</p>
+
+  <div class="nav-section">Dashboard</div>
+  <button id="tab-revenue" class="active">
+    <span class="icon">₿</span> Revenue
+  </button>
+  <button id="tab-expenses">
+    <span class="icon">₿</span> Expenses
+  </button>
+  <button id="tab-profit">
+    <span class="icon">₿</span> Profit
+  </button>
+  <button id="tab-utilization">
+    <span class="icon">₿</span> Time
+  </button>
+  <button id="tab-support">
+    <span class="icon">₿</span> Support
+  </button>
+  <button id="tab-pipeline">
+    <span class="icon">₿</span> Pipeline
+  </button>
+
+  <div class="nav-section">Reports</div>
+  <button id="tab-budget">
+    <span class="icon">₿</span> Budget
+  </button>
+  <button id="tab-vendor">
+    <span class="icon">₿</span> Vendor
+  </button>
+
+  <div class="nav-section" style="margin-top: 12px;">Actions</div>
+  <button id="btn-refresh">
+    <span class="icon">🔄</span> Refresh Data
+  </button>
+  <button id="btn-generate">
+    <span class="icon">📄</span> Generate Report
+  </button>
+  <button id="btn-export" class="button-secondary">
+    <span class="icon">📥</span> Export Data
+  </button>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="header">
+    <h2 id="page-title">Revenue Overview</h2>
+    <div class="header-actions">
+      <button id="btn-print">🖨️ Print</button>
+    </div>
+  </div>
+
+  <div class="content" id="dashboard-content">
+    <div class="loading-overlay" id="loading">
+      <div class="spinner">Loading dashboard data...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- Dashboard State ----
+const STATE = {
+  snapshot: null,
+  activeTab: 'tab-revenue',
+};
+
+// ---- Helpers ----
+const fmtMoney = v => '$' + parseFloat(v || 0).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const fmtPct = v => (v !== null && v !== undefined) ? v.toFixed(1) + '%' : '';
+const fmtNum = v => (v !== null && v !== undefined) ? Math.round(v) : 0;
+
+// ---- Tab Navigation ----
+function switchTab(tabId) {
+  document.querySelectorAll('.sidebar button').forEach(b => b.classList.remove('active'));
+  document.getElementById(tabId)?.classList.add('active');
+  STATE.activeTab = tabId;
+  const titles = {
+    'tab-revenue': 'Revenue Overview',
+    'tab-expenses': 'Expense Overview',
+    'tab-profit': 'Profit Overview',
+    'tab-utilization': 'Time Utilization',
+    'tab-support': 'Support Overview',
+    'tab-pipeline': 'Pipeline Overview',
+    'tab-budget': 'Budget Overview',
+    'tab-vendor': 'Vendor Overview',
+  };
+  document.getElementById('page-title').textContent = titles[tabId] || 'BI Dashboard';
+  loadDashboard(tabId);
+}
+
+document.querySelectorAll('.sidebar button').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.id));
+});
+
+// ---- Fetch Data ----
+async function fetchDashboardData() {
+  try {
+    const response = await fetch('/mcp/sse?tool=get_kpi_snapshot&name=bi-dashboard');
+    if (!response.ok) throw new Error('Failed to fetch data');
+    const data = await response.json();
+    if (data.content) STATE.snapshot = JSON.parse(data.content);
+  } catch (e) {
+    console.warn('Refresh data failed:', e);
+    STATE.snapshot = { error: 'Data not available - call refresh dashboard data first' };
+  }
+}
+
+// ---- Render: Revenue ----
+function renderRevenue() {
+  const s = STATE.snapshot;
+  let html = '';
+
+  // KPI cards
+  html += `<div class="kpi-grid">`;
+  html += `
+    <div class="card">
+      <div class="card-header">
+        <h3>Total Revenue</h3>
+      </div>
+      <div class="card-body">
+        <div class="kpi-value">${fmtMoney(s?.revenue?.total_invoiced || 0)}</div>
+        <div class="flex gap-2 items-center">
+          <b>Collected</b> <span style="color:#718096">${fmtMoney(s?.revenue?.total_collected || 0)}</span>
+          <b>Outstanding</b> <span style="color:#718096">${fmtMoney(s?.revenue?.outstanding || 0)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+  html += `
+    <div class="card">
+      <div class="card-header">
+        <h3>Expenses</h3>
+      </div>
+      <div class="card-body">
+        <div class="kpi-value">${fmtMoney(s?.expenses?.total || 0)}</div>
+        <div class="flex gap-2 items-center">
+          <b>Items</b> <span style="color:#718096">${s?.expenses?.expense_count ?? 0}</span>
+        </div>
+      </div>
+    </div>
+  `;
+  html += `
+    <div class="card">
+      <div class="card-header">
+        <h3>Net Profit</h3>
+      </div>
+      <div class="card-body">
+        <div class="kpi-value ${s?.profit?.net_profit >= 0 ? 'positive' : 'negative'}">
+          ${fmtMoney(s?.profit?.net_profit || 0)}
+        </div>
+        <div class="flex gap-2 items-center">
+          <b>Margin</b> <span style="color:#718096">${fmtPct(s?.profit?.margin_pct)}</span>
+          <b>Efficiency</b> <span style="color:#718096">${fmtPct(s?.profit?.efficiency_pct)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+  html += `
+    <div class="card">
+      <div class="card-header">
+        <h3>Time Utilization</h3>
+      </div>
+      <div class="card-body">
+        <div class="kpi-value">${fmtPct(s?.time?.utilization_pct)}</div>
+        <div class="flex gap-2 items-center">
+          <b>Total</b> <span style="color:#718096">${s?.time?.total_minutes ?? 0} min</span>
+          <b>Billable</b> <span style="color:#718096">${s?.time?.billable_minutes ?? 0} min • ${fmtMoney(s?.time?.billable_revenue || 0)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+  html += `
+    <div class="card">
+      <div class="card-header">
+        <h3>Support Health</h3>
+      </div>
+      <div class="card-body">
+        <div class="flex gap-2 items-center">
+          <b>Open</b> <span style="color:#718096;font-weight:600">${s?.support?.open_tickets ?? 0}</span>
+          <b>Resolved</b> <span style="color:#718096">${s?.support?.resolved_count ?? 0}</span>
+        </div>
+        <br><br>
+        <div class="flex gap-2 items-center">
+          <b>Avg Resolution</b> <span style="color:#718096">${s?.support?.avg_resolution_hours ?? 'N/A'}h</span>
+          <b>CSAT</b> <span style="color:#718096">${s?.support?.csat_average ?? 'N/A'}</span>
+        </div>
+      </div>
+    </div>
+  `;
+  html += `
+    <div class="card">
+      <div class="card-header">
+        <h3>Pipeline Value</h3>
+      </div>
+      <div class="card-body">
+        <div class="flex gap-2 items-center justify-between">
+          <b>Open</b> <b>Won</b> <b>Lost</b>
+        </div>
+        <br>
+        <div class="flex gap-2 items-center justify-between">
+          <span style="color:#718096">${fmtMoney(s?.pipeline?.open_value || 0)}</span>
+          <span style="color:#38a169;font-weight:600">${fmtMoney(s?.pipeline?.closed_won_value || 0)}</span>
+          <span style="color:#e53e3e">${fmtMoney(s?.pipeline?.closed_lost_value || 0)}</span>
+        </div>
+        <br><br>
+        <b>Win Rate</b> <span style="font-weight:600">${fmtPct(s?.pipeline?.win_rate_pct)}</span>
+      </div>
+    </div>
+  `;
+  html += `</div>`;
+
+  // Revenue trend chart
+  html += `<div class="card">
+    <div class="card-header"><h3>Monthly Revenue Trend</h3></div>
+    <div class="card-body chart-container" id="chart-revenue"></div>
+  </div>`;
+
+  // Expense breakdown
+  html += `<div class="card">
+    <div class="card-header"><h3>Expense by Category</h3></div>
+    <div class="card-body chart-container" id="chart-expenses"></div>
+  </div>`;
+
+  // Pipeline chart
+  html += `<div class="card">
+    <div class="card-header"><h3>Pipeline by Stage</h3></div>
+    <div class="card-body chart-container" id="chart-pipeline"></div>
+  </div>`;
+
+  return html;
+}
+
+// ---- Render: Expenses ----
+function renderExpenses() {
+  const s = STATE.snapshot;
+  let html = `<div class="kpi-grid">`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Total Expenses</h3></div>
+    <div class="card-body">
+      <div class="kpi-value">${fmtMoney(s?.expenses?.total || 0)}</div>
+      <div class="flex gap-2 items-center" style="color:#718096;font-size:13px">
+        <b>Items</b> <span>${s?.expenses?.expense_count ?? 0}</span>
+      </div>
+    </div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Top 5 Categories</h3></div>
+    <div class="card-body">
+      <table class="table">
+        <thead><tr><th>Category</th><th style="text-align:right">Total</th></tr></thead>
+        <tbody>`;
+  s?.expenses?.by_category?.slice(0, 5)?.forEach((c, i) => {
+    html += `<tr><td>${i + 1}. ${c.category}</td><td style="text-align:right">${fmtMoney(c.total)}</td></tr>`;
+  });
+  html += `      </tbody>
+      </table>
+    </div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Expense by Category (Chart)</h3></div>
+    <div class="card-body chart-container" id="chart-expenses2"></div>
+  </div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+// ---- Render: Profit ----
+function renderProfit() {
+  const s = STATE.snapshot;
+  let html = `<div class="kpi-grid">`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Net Profit</h3></div>
+    <div class="card-body">
+      <div class="kpi-value ${s?.profit?.net_profit >= 0 ? 'positive' : 'negative'}">
+        ${fmtMoney(s?.profit?.net_profit || 0)}
+      </div>
+      <div class="flex gap-2 items-center">
+        <b>Margin</b> <span style="color:#718096">${fmtPct(s?.profit?.margin_pct)}</span>
+        <b>Efficiency</b> <span style="color:#718096">${fmtPct(s?.profit?.efficiency_pct)}</span>
+      </div>
+    </div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Revenue vs Expenses</h3></div>
+    <div class="card-body">
+      <table class="table">
+        <thead><tr><th style="text-align:right">Metric</th><th style="text-align:right">Value</th></tr></thead>
+        <tbody>
+          <tr><td style="text-align:right">Total Invoiced</td><td style="text-align:right">${fmtMoney(s?.revenue?.total_invoiced || 0)}</td></tr>
+          <tr><td style="text-align:right">Total Collected</td><td style="text-align:right">${fmtMoney(s?.revenue?.total_collected || 0)}</td></tr>
+          <tr><td style="text-align:right">Expenses</td><td style="text-align:right">${fmtMoney(s?.expenses?.total || 0)}</td></tr>
+          <tr><td style="font-weight:600;dossier"></td><td style="text-align:right;font-weight:600">${fmtMoney(s?.profit?.net_profit || 0)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+// ---- Render: Time Utilization ----
+function renderUtilization() {
+  const s = STATE.snapshot;
+  let html = `<div class="kpi-grid">`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Total Time</h3></div>
+    <div class="card-body">
+      <div class="flex gap-2 items-center">
+        <b style="font-size:22px">${fmtNum(s?.time?.total_minutes || 0)} min</b>
+        <b>Total</b>
+        <b style="color:#38a169">Billable</b> <span style="color:#718096">${fmtNum(s?.time?.billable_minutes || 0)} min</span>
+      </div>
+    </div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Utilization</h3></div>
+    <div class="card-body">
+      <div class="kpi-value">${fmtPct(s?.time?.utilization_pct)}</div>
+      <div class="flex gap-2 items-center" style="color:#718096">
+        <b>Billable Revenue</b> <span>${fmtMoney(s?.time?.billable_revenue || 0)}</span>
+      </div>
+    </div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Top Projects</h3></div>
+    <div class="card-body">
+      <table class="table">
+        <thead><tr><th>Project</th><th style="text-align:right">Minutes</th></tr></thead>
+        <tbody>`;
+  s?.time?.by_project?.slice(0, 5)?.forEach((p, i) => {
+    html += `<tr><td>${i + 1}. ${p.project}</td><td style="text-align:right">${fmtNum(p.minutes)} min</td></tr>`;
+  });
+  html += `      </tbody>
+      </table>
+    </div>
+  </div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+// ---- Render: Support ----
+function renderSupport() {
+  const s = STATE.snapshot;
+  let html = `<div class="kpi-grid">`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Support Tickets</h3></div>
+    <div class="card-body">
+      <div class="flex gap-2 items-center">
+        <b style="${s?.support?.open_tickets ? 'color:#e53e3e' : ''}">Open: ${s?.support?.open_tickets ?? 0}</b>
+        <b style="color:#38a169">Resolved: ${s?.support?.resolved_count ?? 0}</b>
+      </div>
+      <br><br>
+      <div class="flex gap-2 items-center">
+        <b>Comments</b> <span style="color:#718096">${s?.support?.comment_count ?? 0}</span>
+        <b>Avg Resolution</b> <span style="color:#718096">${s?.support?.avg_resolution_hours ?? 'N/A'}h</span>
+      </div>
+    </div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Status Breakdown</h3></div>
+    <div class="card-body">
+      <table class="table">
+        <thead><tr><th>Status</th><th style="text-align:right">Count</th></tr></thead>
+        <tbody>`;
+  Object.entries(s?.support?.tickets_by_status || {}).forEach(([k, v]) => {
+    html += `<tr><td>${k}</td><td style="text-align:right">${v}</td></tr>`;
+  });
+  html += `      </tbody>
+      </table>
+    </div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>SLA & CSAT</h3></div>
+    <div class="card-body">
+      <div class="flex gap-2 items-center">
+        <b>SLA Compliance</b> <span style="color:#718096">${s?.support?.sla_compliance_rate ? (s?.support?.sla_compliance_rate * 100).toFixed(1) + '%' : 'N/A'}</span>
+      </div>
+      <br><br>
+      <div class="flex gap-2 items-center">
+        <b>CSAT Rating</b> <span style="color:#718096;font-weight:600">${s?.support?.csat_average ?? 'N/A'}</span>
+      </div>
+    </div>
+  </div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+// ---- Render: Pipeline ----
+function renderPipeline() {
+  const s = STATE.snapshot;
+  let html = `<div class="kpi-grid">`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Pipeline Value</h3></div>
+    <div class="card-body">
+      <div class="flex gap-2 items-center" style="color:#718096;font-size:13px">
+        <b>Open</b> <b>Won</b> <b>Lost</b>
+      </div>
+      <br>
+      <div class="flex gap-2 items-center" style="font-size:16px;font-weight:600">
+        <span style="color:#718096">${fmtMoney(s?.pipeline?.open_value || 0)}</span>
+        <span style="color:#38a169">${fmtMoney(s?.pipeline?.closed_won_value || 0)}</span>
+        <span style="color:#e53e3e">${fmtMoney(s?.pipeline?.closed_lost_value || 0)}</span>
+      </div>
+      <br><br>
+      <b>Win Rate</b> <span style="font-weight:600">${fmtPct(s?.pipeline?.win_rate_pct)}</span>
+    </div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>By Stage</h3></div>
+    <div class="card-body">
+      <table class="table">
+        <thead><tr><th>Stage</th><th style="text-align:right">Deals</th><th style="text-align:right">Value</th></tr></thead>
+        <tbody>`;
+  Object.entries(s?.pipeline?.by_stage || {}).forEach(([st, v]) => {
+    html += `<tr><td>${st}</td><td style="text-align:right">${v.count}</td><td style="text-align:right">${fmtMoney(v.value)}</td></tr>`;
+  });
+  html += `      </tbody>
+      </table>
+    </div>
+  </div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+// ---- Render: Budget ----
+function renderBudget() {
+  const s = STATE.snapshot;
+  let html = `<div class="kpi-grid">`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Budget Allocation</h3></div>
+    <div class="card-body">
+      <div class="kpi-value">Allocated: ${fmtMoney(s?.budget?.budget_allocated || 0)}</div>
+      <br>
+      <div class="flex gap-2 items-center">
+        <b>Spent</b> <span style="color:#718096">${fmtMoney(s?.budget?.budget_spent || 0)}</span>
+        <b>Remaining</b> <span style="color:#718096">${fmtPct(s?.budget?.budget_remaining_pct)}</span>
+      </div>
+    </div>
+  </div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+// ---- Render: Vendor ----
+function renderVendor() {
+  const s = STATE.snapshot;
+  let html = `<div class="kpi-grid">`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Vendor Spend</h3></div>
+    <div class="card-body">
+      <table class="table">
+        <thead><tr><th>Vendor</th><th style="text-align:right">$</th></tr></thead>
+        <tbody>`;
+  Object.entries(s?.vendor?.by_vendor || {}).slice(0, 10).forEach(([v, a]) => {
+    html += `<tr><td>${v}</td><td style="text-align:right">${fmtMoney(a)}</td></tr>`;
+  });
+  html += `      </tbody>
+      </table>
+    </div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-header"><h3>Avg Lead Time</h3></div>
+    <div class="card-body">
+      <div class="kpi-value">${s?.vendor?.avg_lead_time_days ? parseFloat(s?.vendor?.avg_lead_time_days) + ' days' : 'N/A'}</div>
+    </div>
+  </div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+// ---- Render with charts ----
+function renderDashboard(tab) {
+  const renderers = {
+    'tab-revenue': renderRevenue,
+    'tab-expenses': renderExpenses,
+    'tab-profit': renderProfit,
+    'tab-utilization': renderUtilization,
+    'tab-support': renderSupport,
+    'tab-pipeline': renderPipeline,
+    'tab-budget': renderBudget,
+    'tab-vendor': renderVendor,
+  };
+  const render = renderers[tab] || renderRevenue;
+  return render();
+}
+
+// ---- Load Dashboard ----
+function loadDashboard(tab) {
+  const loader = document.getElementById('loading');
+  loader.classList.remove('hidden');
+  document.getElementById('dashboard-content').innerHTML = '';
+  fetchDashboardData().then(() => {
+    document.getElementById('dashboard-content').innerHTML = renderDashboard(tab);
+    initCharts();
+    loader.classList.add('hidden');
+  });
+}
+
+// ---- Charts ----
+let chartInstances = [];
+function initCharts() {
+  const s = STATE.snapshot;
+
+  // Revenue trend chart
+  const months = s?.monthly_trend?.map(m => m.month) || [];
+  const invoiced = s?.monthly_trend?.map(m => m.invoiced) || [];
+  const collected = s?.monthly_trend?.map(m => m.collected) || [];
+  const net = s?.monthly_trend?.map(m => m.net) || [];
+
+  if (months.length > 0) {
+    const ctx = document.getElementById('chart-revenue');
+    if (ctx) {
+      // Destroy existing
+      chartInstances.forEach(c => c.destroy());
+      chartInstances = [];
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: months,
+          datasets: [
+            { label: 'Invoiced', data: invoiced, borderColor: '#4299e1', backgroundColor: 'rgba(66,153,225,0.1)', fill: true, tension: 0.4 },
+            { label: 'Collected', data: collected, borderColor: '#38a169', backgroundColor: 'rgba(56,161,105,0.1)', fill: true, tension: 0.4 },
+            { label: 'Net', data: net, borderColor: '#e53e3e', backgroundColor: 'rgba(229,62,62,0.1)', fill: true, tension: 0.4 },
+          ],
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { font: { size: 11 } } } }, scales: { y: { ticks: { color: '#718096', font: { size: 10 } } }, x: { ticks: { color: '#718096', font: { size: 10 } } } }, },
+      });
+      chartInstances.push(curr));
+    }
+  }
+
+  // Expense breakdown chart
+  const cats = s?.expenses?.by_category || [];
+  if (cats.length > 0) {
+    const ctx = document.getElementById('chart-expenses');
+    if (ctx) {
+      chartInstances.forEach(c => c.destroy());
+      chartInstances = [];
+      new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: cats.map(c => c.category),
+          datasets: [{ data: cats.map(c => c.total), backgroundColor: ['#e53e3e', '#dc3545', '#bd5827', '#d69e2e', '#5279a0', '#4299e1', '#3182ce', '#2b6cb0', '#3182ce', '#2b6cb0'] }],
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 11 }, usePointStyle: true } } }, },
+      });
+      chartInstances.push(chart);
+    }
+  }
+
+  // Pipeline chart
+  const stages = s?.pipeline?.by_stage || {};
+  const stageValues = Object.values(stages);
+  if (stageValues.length > 0) {
+    const ctx = document.getElementById('chart-pipeline');
+    if (ctx) {
+      chartInstances.forEach(c => c.destroy());
+      chartInstances = [];
+      new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: Object.keys(stages),
+          datasets: [{ data: stageValues.map(v => v.value), backgroundColor: ['#4299e1', '#ed8936', '#3182ce', '#e53e3e', '#e53e3e', '#38a169'] }],
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 11 }, usePointStyle: true } } }, },
+      });
+      chartInstances.push(chart);
+    }
+  }
+}
+
+// ---- Print ----
+function printReport() {
+  window.print();
+}
+
+// ---- Load Dashboard ----
+function loadDashboard(tab) {
+  const loader = document.getElementById('loading');
+  loader.classList.remove('hidden');
+  document.getElementById('dashboard-content').innerHTML = '';
+  fetchDashboardData().then(() => {
+    document.getElementById('dashboard-content').innerHTML = renderDashboard(tab);
+    // Note: charts are re-initialized when switching tabs
+    setTimeout(initCharts, 10);
+    loader.classList.add('hidden');
+  });
+}
+
+// ---- Events ----
+document.getElementById('btn-refresh').addEventListener('click', () => {
+  // For stdio MCP - this would trigger MCP tool through some mechanism
+  alert('Refresh button wired for browser-based MCP client. In stdio mode, run: refresh_dashboard_data()');
+});
+
+document.getElementById('btn-print').addEventListener('click', printReport);
+
+// ---- Initial load ----
+loadDashboard('tab-revenue');
+</script>
+</body>
+</html>

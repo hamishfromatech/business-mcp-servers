@@ -1,0 +1,3 @@
+-r requirements.txt
+# Tests require FastMCP and pytest - install via:
+# pip install fastmcp pytest
