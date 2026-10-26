@@ -34,10 +34,10 @@ This repository contains **27 fully-functional MCP servers** that demonstrate pa
 
 | | |
 |---|---|
-| Servers | 27, each independently runnable |
+| Servers | 28, each independently runnable |
 | External APIs required | None |
 | Storage | Plain, human-readable JSON |
-| Test suites | 6 pytest suites (64 tests) |
+| Test suites | 7 pytest suites (71 tests) |
 | Runtime | Python 3.10+ and FastMCP |
 
 ## Why This Matters
@@ -66,6 +66,7 @@ This repository proves that MCP servers can deliver all of this without a single
 |--------|-------------|--------------|-----------|
 | [Invoice Manager](./mcp-servers/invoice-manager) | Invoicing and accounts receivable | Clients, line items, payments, recurring billing, aging report | `invoices.json` |
 | [Support Desk](./mcp-servers/support-desk) | Customer support helpdesk | Tickets, SLA deadlines, escalations, CSAT | `support.json` |
+| [Business Analytics](./mcp-servers/business-analytics) | Cross-server business KPI aggregation | Revenue, expenses, profitability, time, support, pipeline reports | None (reads sibling data) |
 
 ### Procurement & Legal
 
@@ -331,6 +332,7 @@ mcp-servers/
 ├── crm/                          #   "
 ├── contact-book/                 #   "
 ├── okr-tracker/                  #   "
+├── business-analytics/           # Cross-server KPI aggregation (no own data file)
 │
 ├── # Knowledge & productivity
 ├── document-wiki/

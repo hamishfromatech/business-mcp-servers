@@ -28,6 +28,7 @@ python server.py
 |--------|-------------|
 | [invoice-manager](./invoice-manager) | Invoicing with payments, recurring billing, and A/R aging |
 | [support-desk](./support-desk) | Support tickets with SLA tracking, escalations, and CSAT |
+| [business-analytics](./business-analytics) | Cross-server business KPI aggregation: revenue, expenses, profitability, time, support |
 
 ### Procurement & Legal
 
