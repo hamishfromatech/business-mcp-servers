@@ -81,7 +81,27 @@ python server.py
 | [skills-server](./skills-server) | Expose Claude Code skills as MCP resources |
 | [code-reviewer](./code-reviewer) | Code review management with sessions, issues, and standards |
 | [design-audit](./design-audit) | Web design auditing with UI/UX issues and accessibility checks |
-| [tech-debt-tracker](./tech-debt-tracker) | Technical debt tracking with refactoring tasks and metrics |
+| [tech-debt-tracker](./tech-debt-tracker)  |
+| [employee-directory](./employee-directory) | HR — employees, roles, departments, org charts | `employees.json`
+| [it-asset-manager](./it-asset-manager) | IT assets, device lifecycle | `assets.json`
+| [incident-manager](./incident-manager) | IT incident tickets, escalation, SLA | `incidents.json`
+| [compliance-risk-tracker](./compliance-risk-tracker) | Governance, compliance, risk register | `compliance.json`
+| [scheduling-team-calendar](./scheduling-team-calendar) | Team availability, resource scheduling | `schedule.json`
+| [facilities-manager](./facilities-manager) | Maintenance, work orders, spaces | `facilities.json`
+ [employee-directory](./employee-directory) | HR — employees, roles, departments, org charts | `employees.json`
+| [it-asset-manager](./it-asset-manager) | IT assets, device lifecycle | `assets.json`
+| [incident-manager](./incident-manager) | IT incident tickets, escalation, SLA | `incidents.json`
+| [compliance-risk-tracker](./compliance-risk-tracker) | Governance, compliance, risk register | `compliance.json`
+| [scheduling-team-calendar](./scheduling-team-calendar) | Team availability, resource scheduling | `schedule.json`
+| [facilities-manager](./facilities-manager) | Maintenance, work orders, spaces | `facilities.json`
+ Technical debt tracking with refactoring tasks and metrics |
+| [employee-directory](./employee-directory) | HR — employees, roles, departments, org charts | 
+| [it-asset-manager](./it-asset-manager) | IT assets, device lifecycle | 
+| [incident-manager](./incident-manager) | IT incident tickets, escalation, SLA | 
+| [compliance-risk-tracker](./compliance-risk-tracker) | Governance, compliance, risk register | 
+| [scheduling-team-calendar](./scheduling-team-calendar) | Team availability, resource scheduling | 
+| [facilities-manager](./facilities-manager) | Maintenance, work orders, spaces | 
+
 
 ## Configuration
 

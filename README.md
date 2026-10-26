@@ -108,7 +108,21 @@ This repository proves that MCP servers can deliver all of this without a single
 | Server | Description | Key Features | Data File |
 |--------|-------------|--------------|-----------|
 | [File Organizer](./mcp-servers/file-organizer) | Organize and categorize files | File analysis, duplicate detection, organization rules | `organizer.json` |
-| [Inventory Manager](./mcp-servers/inventory-manager) | Stock and product management | Stock in/out, transfers, low-stock alerts | `inventory.json` |
+| [Inventory Manager](./mcp-servers/inventory-manager) | Stock and product management | Stock in/out, transfers, low-stock alerts | `inventory.json`
+| [Employee Directory](./mcp-servers/employee-directory) | HR — employees, roles, departments, org charts | `employees.json` |
+| [IT Asset Manager](./mcp-servers/it-asset-manager) | IT assets, device lifecycle, procurement | `assets.json` |
+| [Incident Manager](./mcp-servers/incident-manager) | IT incident tickets, escalation, SLA | `incidents.json` |
+| [Compliance & Risk Tracker](./mcp-servers/compliance-risk-tracker) | Regulatory deadlines, risk register | `compliance.json` |
+| [Scheduling Team Calendar](./mcp-servers/scheduling-team-calendar) | Team availability, resource scheduling | `schedule.json` |
+| [Facilities Manager](./mcp-servers/facilities-manager) | Maintenance requests, work orders, spaces | `facilities.json`
+| [employee-directory](./mcp-servers/employee-directory) | HR — employees, roles, departments, org charts | `employees.json`
+| [it-asset-manager](./mcp-servers/it-asset-manager) | IT assets, device lifecycle | `assets.json`
+| [incident-manager](./mcp-servers/incident-manager) | IT incident tickets, escalation, SLA | `incidents.json`
+| [compliance-risk-tracker](./mcp-servers/compliance-risk-tracker) | Governance, compliance, risk register | `compliance.json`
+| [scheduling-team-calendar](./mcp-servers/scheduling-team-calendar) | Team availability, resource scheduling | `schedule.json`
+| [facilities-manager](./mcp-servers/facilities-manager) | Maintenance, work orders, spaces | `facilities.json`
+ |
+ |
 | [Password Vault](./mcp-servers/password-vault) | Secure credential storage | AES/Fernet encryption, PBKDF2 key derivation, password generation, strength checking | `vault.json` |
 | [Business Search](./mcp-servers/business-search) | Cross-server search hub | One query across every server's JSON data, incremental indexing | None (indexes other servers) |
 
