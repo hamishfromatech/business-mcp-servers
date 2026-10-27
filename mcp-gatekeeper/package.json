@@ -1,0 +1,35 @@
+{
+  "name": "mcp-gatekeeper",
+  "version": "1.0.0",
+  "description": "MCP Identity Middleware, OAuth Enforcement, and Access Auditing — self-contained plain JSON storage",
+  "main": "script/start-server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node script/start-server.js",
+    "dev": "node script/start-server.js",
+    "build": "tsc",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "gatekeeper",
+    "oauth",
+    "identity",
+    "audit",
+    "fastmcp"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "fastmcp": "^4.23.7",
+    "fast-jwt": "^3.0.0",
+    "jose": "^6.0.10",
+    "uuid": "^11.1.0",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/uuid": "^11.0.0",
+    "typescript": "^5.8.3"
+  }
+}

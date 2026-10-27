@@ -1,0 +1,268 @@
+{
+  "name": "mcp-gatekeeper",
+  "version": "1.0.0",
+
+  /* ------------------------------------------------------------------ */
+  /*  Identity Configuration                                             */
+  /* ------------------------------------------------------------------ */
+  "identity": {
+    /* Session lifetime in milliseconds (default: 3600000 = 1 hour) */
+    "sessionTTL": 3600000,
+    /* Refresh token lifetime in milliseconds (default: 604800000 = 7 days) */
+    "refreshTTL": 604800000,
+    /* Require explicit identity verification for untrusted clients */
+    "requireClientVerification": true,
+    /* Supported client ID patterns for self-registration */
+    "trustedClientIds": [
+      "mcp-gatekeeper",
+      "mcp-inspector",
+      "mcp-cli"
+    ],
+    /* PGP key fingerprint for signing identity claims */
+    "pgpFingerprint": "A1B2C3D4E5F67890ABCDEF1234567890ABCDEF12345678",
+    /* Allowed identity claim names */
+    "allowedClaims": [
+      "sub",
+      "name",
+      "email",
+      "role",
+      "org",
+      "scm",
+      "team",
+      "iat",
+      "exp"
+    ]
+  },
+
+  /* ------------------------------------------------------------------ */
+  /*  OAuth Configuration                                                  */
+  /* ------------------------------------------------------------------ */
+  "oauth": {
+    "enabled": true,
+    /* OAuth discovery base path (default: /auth) */
+    "basePath": "/auth",
+    /* OAuth provider credentials */
+    "providers": {
+      "google": {
+        "baseUrl": "https://your-domain.com",
+        "clientId": process.env.GOOGLE_CLIENT_ID || "",
+        "clientSecret": process.env.GOOGLE_CLIENT_SECRET || "",
+        "scopes": ["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"],
+        "tokenUri": "https://oauth2.googleapis.com/token",
+        "authorizationUri": "https://accounts.google.com/o/oauth2/v2/auth",
+        "tokenExchangeUri": "https://your-domain.com/.well-known/oauth2/token-exchange",
+        "jwksUri": "https://your-domain.com/.well-known/jwks.json",
+        "tokenInterceptors": []
+      },
+      "github": {
+        "baseUrl": "https://your-domain.com",
+        "clientId": process.env.GITHUB_CLIENT_ID || "",
+        "clientSecret": process.env.GITHUB_CLIENT_SECRET || "",
+        "scopes": ["user:email", "repo", "workflow"],
+        "tokenUri": "https://github.com/oauth/token",
+        "authorizationUri": "https://github.com/login/oauth/authorize",
+        "tokenExchangeUri": "https://your-domain.com/.well-known/oauth2/token-exchange",
+        "jwksUri": "https://your-domain.com/.well-known/jwks.json",
+        "tokenInterceptors": []
+      },
+      "azure": {
+        "baseUrl": "https://your-domain.com",
+        "clientId": process.env.AZURE_CLIENT_ID || "",
+        "clientSecret": process.env.AZURE_CLIENT_SECRET || "",
+        "tenantId": process.env.AZURE_TENANT_ID || "",
+        "scopes": ["User.Read"],
+        "tokenUri": "https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token",
+        "authorizationUri": "https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/authorize",
+        "tokenExchangeUri": "https://your-domain.com/.well-known/oauth2/token-exchange",
+        "jwksUri": "https://your-domain.com/.well-known/jwks.json",
+        "tokenInterceptors": []
+      },
+      "custom": {
+        /* For custom OAuth2/OAuth1 providers */
+        "baseUrl": "https://your-domain.com",
+        "clientId": process.env.CUSTOM_CLIENT_ID || "",
+        "clientSecret": process.env.CUSTOM_CLIENT_SECRET || "",
+        "tokenUri": "https://your-domain.comoauth2/token",
+        "authorizationUri": "https://your-domain.com/oauth2/authorize",
+        "tokenExchangeUri": "https://your-domain.com/.well-known/oauth2/token-exchange",
+        "jwksUri": "https://your-domain.com/.well-known/jwks.json",
+        "tokenInterceptors": [],
+        /* OAuth1.0a specific */
+        "oauth1": {
+          "timestampsAreInt64": false,
+          "requestSignatureMethod": "HMAC-SHA256",
+          "signatureAlgorithm": "SHA256"
+        }
+      }
+    },
+    /* Which provider to use as default */
+    "defaultProvider": "google",
+    /* Authorization required for MCP session */
+    "requireAuth": true,
+    /* Allow token exchange for existing access tokens */
+    "tokenExchange": true,
+    /* Enable RSA/ECDSA key binding via JWKS */
+    "joseSupport": true,
+    /* Encrypt tokens with AES-256-GCM */
+    "tokenEncryption": {
+      "enabled": true,
+      "algorithm": "AES-256-GCM",
+      "keyDerivation": "HKDF-SHA256"
+    }
+  },
+
+  /* ------------------------------------------------------------------ */
+  /*  RBAC Configuration                                                     */
+  /* ------------------------------------------------------------------ */
+  "rbac": {
+    "enabled": true,
+    /*Role-to-scoped-access map */
+    "roles": {
+      "viewer": ["read"],
+      "contributor": ["read", "write"],
+      "admin": ["read", "write", "delete", "manage"],
+      "auditor": ["read", "audit"],
+      "readonly": ["read", "audit"],
+      "developer": ["read", "write"]
+    },
+    /* Allow custom role-based access */
+    "customRoles": true,
+    /* Default role if not specified */
+    "defaultRole": "viewer",
+    /* Roles requiring authentication */
+    "authRequiredRoles": ["contributor", "admin"]
+  },
+
+  /* ------------------------------------------------------------------ */
+  /*  Audit Configuration                                                       */
+  /* ------------------------------------------------------------------ */
+  "audit": {
+    "enabled": true,
+    /* Audit log directory */
+    "logDirectory": "./audit-logs",
+    /* Log file rotation: 7 days */
+    "maxDays": 7,
+    /* Audit events to record */
+    "events": [
+      "auth.login",
+      "auth.logout",
+      "auth.token_refresh",
+      "auth.token_exchange",
+      "auth.session_create",
+      "auth.session_destroy",
+      "auth.role_assumed",
+      "auth.provider_authenticate",
+      "access.grant",
+      "access.deny",
+      "access.tool_call",
+      "access.resource_read",
+      "access.resource_write",
+      "access.resource_delete",
+      "access.method",
+      "security.suspicious",
+      "security.failure",
+      "security.blocked"
+    ],
+    /* Minimum log level */
+    "minLevel": "info",
+    /* Retain audit logs indefinitely */
+    "retentionDays": -1,
+    /* Compress old audit logs */
+    "compressOldLogs": true,
+    /* Sample rate: 1.0 = 100%, 0.1 = 10% */
+    "samplingRate": 1.0
+  },
+
+  /* ------------------------------------------------------------------ */
+  /*  Security Configuration                                                   */
+  /* ------------------------------------------------------------------ */
+  "security": {
+    "rateLimiting": {
+      "enabled": true,
+      "requestsPerWindow": 3000,
+      "windowMs": 3600000, /* 1 hour */
+      "burstMultiplier": 2.0
+    },
+    "cors": {
+      "origin": ["*"],
+      "methods": ["GET", "POST", "OPTIONS"],
+      "headers": ["Authorization", "Content-Type", "Accept"],
+      "preflightMaxAge": 86400
+    },
+    "headers": {
+      "x-frameOptions": "DENY",
+      "x-content_type_options": "nosniff",
+      "x-xss_protection": "0",
+      "strict_transport_security": "max-age=31536000",
+      "content_security_policy": "default-src 'self'",
+      "cross_origin_opener_policy": "same-origin",
+      "cross_origin_embedding_policy": "require-csr"
+    },
+    "tenantIsolation": {
+      "enabled": true,
+      "defaultNamespace": "mcp-gatekeeper-default"
+    }
+  },
+
+  /* ------------------------------------------------------------------ */
+  /*  Storage Configuration                                                      */
+  /* ------------------------------------------------------------------ */
+  "storage": {
+    "type": "file",
+    "basePath": "./.mcp-gatekeeper",
+    /* Storage options */
+    "options": {
+      "autoSync": true,
+      "syncIntervalMs": 500,
+      "compression": null,
+      "encryption": null
+    },
+    /* Backup configuration */
+    "backup": {
+      "enabled": true,
+      "keepRecent": 7,
+      "interval": "daily",
+      "time": "02:00"
+    },
+    /* Database tables (schema-able) */
+    "tables": {
+      "users": {
+        "id": "uuid",
+        "name": "text",
+        "email": "text",
+        "role": "text",
+        "createdAt": "timestamp",
+        "updatedAt": "timestamp"
+      },
+      "tokens": {
+        "id": "uuid",
+        "userId": "uuid",
+        "type": "text",
+        "provider": "text",
+        "accessToken": "text",
+        "refreshToken": "text",
+        "expiresAt": "timestamp",
+        "createdAt": "timestamp"
+      },
+      "sessions": {
+        "id": "uuid",
+        "userId": "uuid",
+        "provider": "text",
+        "deviceId": "text",
+        "expiresAt": "timestamp",
+        "createdAt": "timestamp"
+      },
+      "audit": {
+        "id": "uuid",
+        "userId": "uuid",
+        "action": "text",
+        "entity": "text",
+        "resource": "text",
+        "method": "text",
+        "ip": "text",
+        "level": "text",
+        "createdAt": "timestamp"
+      }
+    }
+  }
+}
